@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+{#- macro: a stacked severity distribution bar (critical/warning/minor segments) -#}
+{% macro dist(nc, nw, nm, labeled=false) -%}
+{%- set tot = (nc + nw + nm) or 1 -%}
+{%- if nc %}<span class="dist-seg fill-critical" style="flex-grow:{{ nc }}" title="{{ nc }} {{ sev_labels['error'] }}">{% if labeled and (nc / tot) > 0.07 %}<span>{{ nc }}</span>{% endif %}</span>{% endif -%}
+{%- if nw %}<span class="dist-seg fill-warning" style="flex-grow:{{ nw }}" title="{{ nw }} {{ sev_labels['warn'] }}">{% if labeled and (nw / tot) > 0.07 %}<span>{{ nw }}</span>{% endif %}</span>{% endif -%}
+{%- if nm %}<span class="dist-seg fill-minor" style="flex-grow:{{ nm }}" title="{{ nm }} {{ sev_labels['info'] }}">{% if labeled and (nm / tot) > 0.07 %}<span>{{ nm }}</span>{% endif %}</span>{% endif -%}
+{%- endmacro %}
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data audit: {{ dataset }}</title>
+<style>
+/* ===== TOKENS (Signal: warm paper, near-black ink, colour only for severity) ===== */
+:root{
+  --font-ui:"Hanken Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-display:"Space Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Consolas,monospace;
+
+  --paper:oklch(0.986 0.004 90);
+  --surface:oklch(0.998 0.002 90);
+  --surface-2:oklch(0.972 0.005 90);
+  --ink:oklch(0.245 0.012 60);
+  --ink-2:oklch(0.46 0.011 60);
+  --ink-3:oklch(0.63 0.008 60);
+  --line:oklch(0.905 0.006 85);
+  --line-2:oklch(0.85 0.008 85);
+  --shadow:0 1px 2px rgba(40,33,20,.04),0 4px 16px rgba(40,33,20,.05);
+  --shadow-lg:0 8px 40px rgba(40,33,20,.12);
+
+  --accent:#1c1b1a;
+  --accent-soft:color-mix(in oklab,var(--accent) 12%,transparent);
+
+  --c-critical:oklch(0.585 0.183 25);
+  --c-warning:oklch(0.745 0.135 72);
+  --c-minor:oklch(0.62 0.045 252);
+
+  --r-sm:7px; --r-md:11px; --r-lg:16px; --r-btn:9px; --bw:1px;
+  --fs:14.5px; --row-py:13px; --gap:14px; --rail-w:266px;
+
+  --bg-critical:color-mix(in oklab,var(--c-critical) 11%,var(--surface));
+  --bg-warning:color-mix(in oklab,var(--c-warning) 13%,var(--surface));
+  --bg-minor:color-mix(in oklab,var(--c-minor) 11%,var(--surface));
+  --ln-critical:color-mix(in oklab,var(--c-critical) 32%,var(--line));
+  --c-clean:oklch(0.55 0.12 155);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:var(--font-ui);font-size:var(--fs);color:var(--ink);background:var(--paper);
+  -webkit-font-smoothing:antialiased;line-height:1.45}
+.mono{font-family:var(--font-mono);font-feature-settings:"tnum" 1;letter-spacing:-.01em}
+button{font-family:inherit;color:inherit;cursor:pointer}
+a{color:var(--ink-2);text-decoration:none} a:hover{color:var(--ink);text-decoration:underline}
+h1,h2{font-family:var(--font-display);margin:0;letter-spacing:-.02em}
+::selection{background:var(--accent-soft)}
+
+/* ===== APP SHELL ===== */
+.app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.appbar{display:grid;grid-template-columns:1fr auto;align-items:center;height:58px;padding:0 16px;
+  background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0;z-index:30}
+.appbar-l{display:flex;align-items:center;gap:14px;min-width:0}
+.appbar-r{display:flex;align-items:center;justify-content:flex-end;gap:10px}
+.brand{display:flex;align-items:center;gap:9px}
+.brand-mark{width:15px;height:15px;background:var(--ink);transform:rotate(45deg);border-radius:3px}
+.brand-name{font-family:var(--font-display);font-weight:600;font-size:16px;letter-spacing:-.02em}
+.appbar-divider{width:1px;height:22px;background:var(--line-2)}
+.file-pill{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2);
+  background:var(--surface-2);border:1px solid var(--line);border-radius:99px;padding:5px 12px;min-width:0}
+.file-pill .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
+.file-pill-dot{width:6px;height:6px;border-radius:50%;background:var(--c-minor);flex-shrink:0}
+.resolved-pill{font-size:12.5px;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);
+  border-radius:99px;padding:5px 11px}
+.resolved-num{font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+.critical-flag{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--c-critical);
+  background:var(--bg-critical);border:1px solid var(--ln-critical);border-radius:99px;padding:5px 11px;font-variant-numeric:tabular-nums}
+.critical-flag[data-zero="true"]{color:var(--ink-3);background:var(--surface-2);border-color:var(--line)}
+.critical-flag[data-zero="true"] .sev-dot{background:var(--ink-3)}
+.app-body{flex:1;min-height:0;overflow:hidden}
+
+/* ===== SEVERITY PRIMITIVES ===== */
+.sev-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block}
+.sev-critical{background:var(--c-critical)} .sev-warning{background:var(--c-warning)} .sev-minor{background:var(--c-minor)}
+.cat-code{font-family:var(--font-mono);font-size:10.5px;font-weight:600;letter-spacing:.04em;color:var(--ink-3);
+  background:var(--surface-2);border:1px solid var(--line);padding:1px 5px;border-radius:4px;flex-shrink:0}
+.status-tag{font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;border:1px solid var(--line-2);white-space:nowrap}
+.status-resolved{color:var(--c-clean);background:color-mix(in oklab,var(--c-clean) 12%,var(--surface));border-color:color-mix(in oklab,var(--c-clean) 28%,var(--line))}
+.status-ignored{color:var(--ink-3);background:var(--surface-2)}
+.status-review{color:color-mix(in oklab,var(--c-warning) 70%,var(--ink));background:var(--bg-warning);border-color:color-mix(in oklab,var(--c-warning) 30%,var(--line))}
+
+/* distribution bar */
+.dist-bar{display:flex;width:100%;height:6px;border-radius:99px;overflow:hidden;background:var(--surface-2);gap:1.5px}
+.dist-seg{min-width:3px;display:flex;align-items:center;justify-content:center}
+.dist-seg span{font-size:10px;font-weight:700;color:#fff;mix-blend-mode:plus-lighter}
+.fill-critical{background:var(--c-critical)} .fill-warning{background:var(--c-warning)} .fill-minor{background:var(--c-minor)}
+
+/* ===== BUTTONS / CHIPS / SEARCH ===== */
+.btn{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;padding:8px 14px;
+  border-radius:var(--r-btn);border:1px solid transparent;transition:.15s;white-space:nowrap}
+.btn-sm{padding:6px 11px;font-size:12.5px}
+.btn-solid{background:var(--ink);color:var(--paper)}
+.btn-solid:hover{background:color-mix(in oklab,var(--ink) 86%,var(--accent))}
+.btn-ghost{background:var(--surface);color:var(--ink-2);border-color:var(--line-2)}
+.btn-ghost:hover{color:var(--ink);background:var(--surface-2);border-color:var(--ink-3)}
+.chip{font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--surface);border:1px solid var(--line-2);
+  border-radius:99px;padding:5px 13px;transition:.13s}
+.chip:hover{border-color:var(--ink-3);color:var(--ink)}
+.chip--on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.chip-critical.chip--on{background:var(--c-critical);border-color:var(--c-critical);color:#fff}
+.chip-warning.chip--on{background:var(--c-warning);border-color:var(--c-warning);color:#3a2a00}
+.chip-minor.chip--on{background:var(--c-minor);border-color:var(--c-minor);color:#fff}
+.search{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line-2);
+  border-radius:var(--r-btn);padding:0 10px;height:36px;min-width:230px;transition:.15s}
+.search:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.search-ic{color:var(--ink-3);font-size:15px}
+.search input{flex:1;border:none;background:none;outline:none;font-family:inherit;font-size:13.5px;color:var(--ink);min-width:0}
+.search input::placeholder{color:var(--ink-3)}
+.search-clear{border:none;background:none;color:var(--ink-3);font-size:18px;line-height:1;padding:0 2px}
+.search-clear:hover{color:var(--ink)}
+.sev-filters{display:flex;gap:6px;flex-wrap:wrap}
+
+/* ===== CATEGORY RAIL ===== */
+.triage{display:grid;grid-template-columns:var(--rail-w) 1fr;height:100%}
+.rail{border-right:1px solid var(--line);padding:18px 14px;overflow:auto;background:var(--surface)}
+.rail-file{padding:0 4px 14px;margin-bottom:12px;border-bottom:1px solid var(--line)}
+.rail-file-name{font-size:12.5px;font-weight:600;color:var(--ink);word-break:break-all;line-height:1.35}
+.rail-file-sub{font-size:11.5px;color:var(--ink-3);margin-top:4px}
+.rail-section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3);padding:0 4px;margin:4px 0 9px}
+.cat-nav{display:flex;flex-direction:column;gap:3px}
+.cat-nav-item{display:flex;flex-direction:column;gap:7px;text-align:left;width:100%;background:transparent;
+  border:1px solid transparent;border-radius:9px;padding:9px 11px;transition:.13s}
+.cat-nav-item:hover{background:var(--surface-2)}
+.cat-nav-item--on{background:var(--surface);border-color:var(--line-2);box-shadow:var(--shadow)}
+.cat-nav-item--on .cni-label{color:var(--ink)}
+.cni-main{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cni-label{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--ink-2);min-width:0}
+.cni-label-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cni-count{font-family:var(--font-mono);font-size:12.5px;font-weight:600;color:var(--ink-3);font-variant-numeric:tabular-nums;flex-shrink:0}
+.cat-nav-item--on .cni-count{color:var(--ink)}
+
+/* ===== STREAM ===== */
+.stream{overflow:auto;height:100%}
+.stream-head{padding:24px 32px 0;position:sticky;top:0;background:var(--paper);z-index:10}
+.stream-head-top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}
+.eyebrow{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.13em;color:var(--ink-3)}
+.stream-title{font-size:27px;font-weight:600;margin:5px 0 4px}
+.stream-byline{font-size:12.5px;color:var(--ink-3)}
+.summary-strip{display:flex;align-items:center;gap:22px;margin:20px 0 0;padding:16px 20px;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);flex-wrap:wrap}
+.ss-metric{display:flex;flex-direction:column}
+.ss-num{font-family:var(--font-display);font-size:30px;font-weight:600;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.ss-cap{font-size:11.5px;color:var(--ink-3);margin-top:4px}
+.ss-metric--clean .ss-num{color:var(--c-clean)}
+.ss-divider{width:1px;align-self:stretch;background:var(--line)}
+.ss-sevs{display:flex;flex-direction:column;gap:6px}
+.ss-sev{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)}
+.ss-sev b{color:var(--ink);font-variant-numeric:tabular-nums;min-width:30px;display:inline-block;text-align:right}
+.ss-bar{flex:1;min-width:160px}
+.stream-controls{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 0 14px;margin-top:14px;flex-wrap:wrap}
+.stream-body{padding:0 32px 80px}
+.group{margin-top:30px}
+.group.reference{margin-top:48px;border-top:1px solid var(--line);padding-top:8px}
+.group-head{margin-bottom:11px}
+.group-head-l{display:flex;align-items:center;gap:9px}
+.group-head-l h2{font-size:16px;font-weight:600}
+.group-count{font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--ink-3);
+  background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:1px 7px}
+.group-blurb{font-size:12.5px;color:var(--ink-3);margin:5px 0 0;max-width:680px}
+.more{font-size:12px;color:var(--ink-3);font-style:italic;padding:10px 2px 0}
+
+/* ===== ISSUE ROW ===== */
+.issue-list{display:flex;flex-direction:column;gap:7px}
+.issue{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;transition:box-shadow .15s}
+.issue--open{box-shadow:var(--shadow);border-color:var(--line-2)}
+.issue--closed{opacity:.6}
+.issue-head{display:flex;align-items:center;gap:12px;width:100%;background:none;border:none;
+  padding:var(--row-py) 15px var(--row-py) 0;text-align:left;position:relative}
+.issue-rail{width:3px;align-self:stretch;background:transparent;flex-shrink:0}
+.lvl-critical .issue-rail{background:var(--c-critical)}
+.lvl-warning .issue-rail{background:var(--c-warning)}
+.lvl-minor .issue-rail{background:var(--c-minor)}
+.issue-head:hover{background:var(--surface-2)}
+.issue-row-no{font-size:12px;color:var(--ink-3);min-width:62px;text-align:right;flex-shrink:0}
+.issue-title{flex:1;display:flex;align-items:center;gap:9px;font-size:13.8px;font-weight:500;min-width:0;flex-wrap:wrap}
+.field-chip{font-size:11px;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:0 6px;font-weight:500}
+.issue-meta{display:flex;align-items:center;gap:11px;flex-shrink:0}
+.chevron{font-size:18px;color:var(--ink-3);transition:transform .2s;display:inline-block;transform:rotate(90deg)}
+.issue--open .chevron{transform:rotate(-90deg);color:var(--ink)}
+.issue-detail-wrap{display:block;overflow:hidden;max-height:0}
+.issue--open .issue-detail-wrap{max-height:none}
+.issue-detail-inner{overflow:hidden}
+.issue--open .issue-detail-inner{animation:issueReveal .22s ease both}
+@keyframes issueReveal{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
+.issue-detail{padding:4px 18px 18px 18px;display:grid;grid-template-columns:1fr auto;gap:22px;align-items:end;border-top:1px solid var(--line);margin-top:2px}
+.detail-grid{display:flex;flex-direction:column;gap:14px;min-width:0}
+.found-expected{display:flex;align-items:stretch;gap:12px;flex-wrap:wrap}
+.fe-block{flex:1;min-width:170px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:9px 12px}
+.fe-found{background:var(--bg-critical);border-color:var(--ln-critical)}
+.fe-expected{background:color-mix(in oklab,var(--c-clean) 9%,var(--surface));border-color:color-mix(in oklab,var(--c-clean) 24%,var(--line))}
+.fe-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3);margin-bottom:4px}
+.fe-val{font-size:13px;font-weight:500;word-break:break-word}
+.fe-found .fe-val{color:color-mix(in oklab,var(--c-critical) 65%,var(--ink))}
+.fe-arrow{display:flex;align-items:center;color:var(--ink-3);font-size:15px}
+.detail-text{font-size:13px;color:var(--ink-2);margin:0;max-width:620px}
+.fix-label{font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.06em;color:var(--ink-3);margin-right:7px}
+.record-context{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px 18px;padding-top:12px;border-top:1px dashed var(--line-2)}
+.kv-k{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-bottom:2px}
+.kv-v{font-size:13px;color:var(--ink);font-weight:500;word-break:break-word}
+.note-wrap{padding-top:4px}
+.tnote{width:100%;max-width:620px;font-family:inherit;font-size:12.5px;color:var(--ink);background:var(--surface-2);
+  border:1px solid var(--line);border-radius:var(--r-sm);padding:7px 10px;resize:vertical}
+.tnote:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.issue-actions{display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.tact--on[data-act="keep"]{background:var(--c-clean);border-color:var(--c-clean);color:#fff}
+.tact--on[data-act="dismiss"]{background:var(--ink-3);border-color:var(--ink-3);color:var(--paper)}
+.tact--on[data-act="review"]{background:var(--c-warning);border-color:var(--c-warning);color:#3a2a00}
+
+/* ===== REFERENCE PANELS ===== */
+.ref-panel{border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;margin-bottom:12px;background:var(--surface)}
+.ref-panel>summary{padding:11px 15px;cursor:pointer;font-weight:600;font-size:13.5px;list-style:none;background:var(--surface-2)}
+.ref-panel>summary::-webkit-details-marker{display:none}
+.ref-panel>summary::before{content:"\25B8  ";color:var(--ink-3)}
+.ref-panel[open]>summary::before{content:"\25BE  "}
+.ref-panel table{width:100%;border-collapse:collapse;font-size:12.5px}
+.ref-panel th,.ref-panel td{text-align:left;padding:7px 15px;border-top:1px solid var(--line);vertical-align:top}
+.ref-panel thead th{border-top:none;color:var(--ink-3);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em}
+.ref-panel td.num,.ref-panel th.num{text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.ref-panel code{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-2)}
+
+/* ===== EMPTY / TOAST ===== */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:80px 20px;text-align:center}
+.empty--sm{padding:50px 20px}
+.empty-mark{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-size:22px;color:var(--c-clean);
+  background:color-mix(in oklab,var(--c-clean) 12%,var(--surface));border:1px solid color-mix(in oklab,var(--c-clean) 26%,var(--line))}
+.empty-title{font-family:var(--font-display);font-size:16px;font-weight:600}
+.empty-sub{font-size:13px;color:var(--ink-3)}
+.toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,16px);opacity:0;pointer-events:none;background:var(--ink);
+  color:var(--paper);font-size:13px;font-weight:500;padding:11px 18px;border-radius:10px;box-shadow:var(--shadow-lg);transition:.25s;z-index:60}
+.toast--on{opacity:1;transform:translate(-50%,0)}
+
+*::-webkit-scrollbar{width:11px;height:11px}
+*::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:99px;border:3px solid var(--paper)}
+.rail::-webkit-scrollbar-thumb{border-color:var(--surface)}
+*::-webkit-scrollbar-thumb:hover{background:var(--ink-3)}
+
+@media (max-width:820px){
+  .triage{grid-template-columns:1fr}
+  .rail{border-right:none;border-bottom:1px solid var(--line)}
+  .stream-head{padding:18px 16px 0} .stream-body{padding:0 16px 60px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="appbar">
+    <div class="appbar-l">
+      <div class="brand"><span class="brand-mark"></span><span class="brand-name">dataset-auditor</span></div>
+      <div class="appbar-divider"></div>
+      <div class="file-pill"><span class="file-pill-dot"></span><span class="mono">{{ file_name }}</span></div>
+    </div>
+    <div class="appbar-r">
+      {% if groups %}<span class="resolved-pill">triaged <span class="resolved-num" id="triaged-count">0</span></span>{% endif %}
+      <span class="critical-flag" data-zero="{{ 'true' if stats.error == 0 else 'false' }}"><span class="sev-dot sev-critical"></span>{{ "{:,}".format(stats.error) }} {{ sev_labels['error'] }}</span>
+      {% if groups %}<button class="btn btn-ghost btn-sm" id="export">&#8615; Export</button>{% endif %}
+    </div>
+  </header>
+
+  <div class="app-body">
+  {% if groups %}
+    <div class="triage">
+      <aside class="rail">
+        <div class="rail-file">
+          <div class="rail-file-name mono">{{ file_name }}</div>
+          <div class="rail-file-sub">{% if n_rows is not none %}{{ "{:,}".format(n_rows) }} records{% endif %}{% if n_cols %} &middot; {{ n_cols }} columns{% endif %}</div>
+        </div>
+        <div class="rail-section-label">Categories</div>
+        <nav class="cat-nav">
+          <button type="button" class="cat-nav-item cat-nav-item--on" data-cat="all">
+            <span class="cni-main"><span class="cni-label"><span class="cni-label-txt">All issues</span></span><span class="cni-count">{{ "{:,}".format(stats.total) }}</span></span>
+          </button>
+          {% for g in groups %}
+          <button type="button" class="cat-nav-item" data-cat="{{ g.check }}">
+            <span class="cni-main"><span class="cni-label"><span class="cat-code">{{ g.code }}</span><span class="cni-label-txt">{{ g.title }}</span></span><span class="cni-count">{{ "{:,}".format(g.count) }}</span></span>
+            <span class="dist-bar" style="height:4px">{{ dist(g.n_error, g.n_warn, g.n_info) }}</span>
+          </button>
+          {% endfor %}
+        </nav>
+      </aside>
+
+      <main class="stream">
+        <header class="stream-head">
+          <div class="stream-head-top">
+            <div>
+              <div class="eyebrow">Data audit</div>
+              <h1 class="stream-title">{{ dataset }}</h1>
+              <div class="stream-byline">
+                {%- if generated_at %}Generated {{ generated_at }}{% endif -%}
+                {%- if n_rows is not none %} &middot; {{ "{:,}".format(n_rows) }} rows audited{% endif -%}
+                {%- if source_url %} &middot; <a href="{{ source_url }}">source</a>{% endif -%}
+              </div>
+            </div>
+          </div>
+
+          <div class="summary-strip">
+            <div class="ss-metric"><div class="ss-num">{{ "{:,}".format(stats.total) }}</div><div class="ss-cap">issues found</div></div>
+            <div class="ss-divider"></div>
+            <div class="ss-sevs">
+              <div class="ss-sev"><span class="sev-dot sev-critical"></span><b>{{ "{:,}".format(stats.error) }}</b> {{ sev_labels['error'] }}</div>
+              <div class="ss-sev"><span class="sev-dot sev-warning"></span><b>{{ "{:,}".format(stats.warn) }}</b> {{ sev_labels['warn'] }}</div>
+              <div class="ss-sev"><span class="sev-dot sev-minor"></span><b>{{ "{:,}".format(stats.info) }}</b> {{ sev_labels['info'] }}</div>
+            </div>
+            {% if stats.clean_pct is not none %}
+            <div class="ss-divider"></div>
+            <div class="ss-metric ss-metric--clean"><div class="ss-num">{{ stats.clean_pct }}%</div><div class="ss-cap">{{ "{:,}".format(n_rows - stats.rows_affected) }} of {{ "{:,}".format(n_rows) }} rows clean</div></div>
+            {% endif %}
+            <div class="ss-bar"><div class="dist-bar" style="height:10px">{{ dist(stats.error, stats.warn, stats.info, true) }}</div></div>
+          </div>
+
+          <div class="stream-controls">
+            <div class="search">
+              <span class="search-ic" aria-hidden="true">&#9906;</span>
+              <input id="q" placeholder="Search issues&hellip;" aria-label="Search issues">
+              <button type="button" class="search-clear" id="qclear" aria-label="Clear search">&times;</button>
+            </div>
+            <div class="sev-filters">
+              <button type="button" class="chip chip--on" data-sevf="all">All</button>
+              <button type="button" class="chip chip-critical" data-sevf="error">{{ sev_labels['error'] }}</button>
+              <button type="button" class="chip chip-warning" data-sevf="warn">{{ sev_labels['warn'] }}</button>
+              <button type="button" class="chip chip-minor" data-sevf="info">{{ sev_labels['info'] }}</button>
+              <button type="button" class="chip" id="hideDismissed" data-on="false">Hide dismissed</button>
+            </div>
+          </div>
+        </header>
+
+        <div class="stream-body">
+          {% if capped %}<p class="more">Some issues come in many varieties. Each section lists the first {{ cap }} and notes how many more there are; the totals are complete.</p>{% endif %}
+
+          {% for g in groups %}
+          <section class="group" id="grp-{{ g.check }}" data-cat="{{ g.check }}">
+            <div class="group-head">
+              <div class="group-head-l"><span class="cat-code">{{ g.code }}</span><h2>{{ g.title }}</h2><span class="group-count">{{ "{:,}".format(g.count) }}</span></div>
+              {% if g.blurb %}<p class="group-blurb">{{ g.blurb }}</p>{% endif %}
+            </div>
+            <div class="issue-list">
+              {% for r in g.rows %}
+              {% set sc = sev_class[r.severity] %}
+              <div class="issue lvl-{{ sc }}" data-fkey="{{ r.key }}" data-cat="{{ g.check }}" data-sev="{{ r.severity }}"
+                   data-check="{{ g.check }}" data-field="{{ r.field or '' }}" data-msg="{{ r.message }}" data-ev="{{ r.evidence or '' }}" data-count="{{ r.count }}">
+                <button type="button" class="issue-head">
+                  <span class="issue-rail"></span>
+                  <span class="sev-dot sev-{{ sc }}"></span>
+                  <span class="issue-row-no mono">{% if r.count == 1 %}{{ r.sample_ids[0] if r.sample_ids else "&mdash;" }}{% else %}&times;{{ "{:,}".format(r.count) }}{% endif %}</span>
+                  <span class="issue-title">{{ r.message }}{% if r.field %}<span class="field-chip mono">{{ r.field }}</span>{% endif %}</span>
+                  <span class="issue-meta">
+                    <span class="status-tag" data-status style="display:none"></span>
+                    <span class="chevron" aria-hidden="true">&rsaquo;</span>
+                  </span>
+                </button>
+                <div class="issue-detail-wrap"><div class="issue-detail-inner">
+                  <div class="issue-detail">
+                    <div class="detail-grid">
+                      {% if r.expected %}
+                      <div class="found-expected">
+                        {% if r.evidence %}<div class="fe-block fe-found"><div class="fe-label">Found</div><div class="fe-val mono">{{ r.evidence }}</div></div>
+                        <div class="fe-arrow" aria-hidden="true">&rarr;</div>{% endif %}
+                        <div class="fe-block fe-expected"><div class="fe-label">Expected</div><div class="fe-val mono">{{ r.expected }}</div></div>
+                      </div>
+                      {% if r.suggested_fix %}<p class="detail-text"><span class="fix-label">Fix</span>{{ r.suggested_fix }}</p>{% endif %}
+                      {% elif r.evidence or r.suggested_fix %}
+                      <div class="found-expected">
+                        {% if r.evidence %}<div class="fe-block fe-found"><div class="fe-label">Evidence</div><div class="fe-val mono">{{ r.evidence }}</div></div>{% endif %}
+                        {% if r.evidence and r.suggested_fix %}<div class="fe-arrow" aria-hidden="true">&rarr;</div>{% endif %}
+                        {% if r.suggested_fix %}<div class="fe-block fe-expected"><div class="fe-label">Suggested fix</div><div class="fe-val">{{ r.suggested_fix }}</div></div>{% endif %}
+                      </div>
+                      {% endif %}
+                      <p class="detail-text">Affects {{ "{:,}".format(r.count) }} row{{ "" if r.count == 1 else "s" }}{% if r.sample_ids %} &middot; {{ r.sample_ids|join(", ") }}{% if r.count > r.sample_ids|length %} and {{ "{:,}".format(r.count - r.sample_ids|length) }} more{% endif %}{% endif %}.</p>
+                      {% if r.detail_row %}
+                      <div class="record-context">
+                        {% for k, v in r.detail_row %}<div><div class="kv-k">{{ k }}</div><div class="kv-v">{{ v }}</div></div>{% endfor %}
+                      </div>
+                      {% endif %}
+                      <div class="record-context" style="border:none;padding-top:0">
+                        <div><div class="kv-k">Check</div><div class="kv-v mono">{{ g.check }}</div></div>
+                      </div>
+                      <div class="note-wrap"><textarea class="tnote" rows="2" placeholder="Add a note (saved in your browser)&hellip;"></textarea></div>
+                    </div>
+                    <div class="issue-actions">
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="keep">Keep</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="dismiss">Dismiss</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="review">Needs review</button>
+                    </div>
+                  </div>
+                </div></div>
+              </div>
+              {% endfor %}
+            </div>
+            {% if g.hidden_rows %}<div class="more">+ {{ "{:,}".format(g.hidden_rows) }} more distinct finding{{ "" if g.hidden_rows == 1 else "s" }} ({{ "{:,}".format(g.hidden_findings) }} row{{ "" if g.hidden_findings == 1 else "s" }}) not shown</div>{% endif %}
+          </section>
+          {% endfor %}
+
+          <div class="empty empty--sm" id="empty" style="display:none">
+            <div class="empty-mark">&#10003;</div><div class="empty-title">Nothing matches</div><div class="empty-sub">Try clearing the search or filters.</div>
+          </div>
+
+          {% if overview or field_summary %}
+          <section class="group reference">
+            <div class="group-head"><div class="group-head-l"><h2>Reference</h2></div><p class="group-blurb">The raw profile behind the findings.</p></div>
+            {% if overview %}
+            <details class="ref-panel" id="overview">
+              <summary>Dataset overview &middot; {{ "{:,}".format(overview.n_rows) }} rows &times; {{ overview.n_cols }} columns</summary>
+              <table>
+                <thead><tr><th>Column</th><th>Type</th><th class="num">% missing</th></tr></thead>
+                <tbody>
+                {% for c in overview.columns %}<tr><td><code>{{ c.name }}</code></td><td>{{ c.dtype }}</td><td class="num">{{ "%.1f"|format(c.null_pct) }}%</td></tr>{% endfor %}
+                </tbody>
+              </table>
+              {% for cat in overview.categoricals %}
+              <table>
+                <thead><tr><th>{{ cat.name }}</th><th class="num">count</th></tr></thead>
+                <tbody>{% for value, n in cat.counts %}<tr><td><code>{{ value }}</code></td><td class="num">{{ "{:,}".format(n) }}</td></tr>{% endfor %}</tbody>
+              </table>
+              {% endfor %}
+            </details>
+            {% endif %}
+            {% if field_summary %}
+            <details class="ref-panel" id="by-column">
+              <summary>Findings by column &middot; most-affected first</summary>
+              <table>
+                <thead><tr><th>Column</th><th class="num">total</th><th class="num">{{ sev_labels['error'] }}</th><th class="num">{{ sev_labels['warn'] }}</th><th class="num">{{ sev_labels['info'] }}</th></tr></thead>
+                <tbody>
+                {% for r in field_summary %}
+                <tr>
+                  <td>{% if r.field == "(whole row / dataset)" %}<em>{{ r.field }}</em>{% else %}<code>{{ r.field }}</code>{% endif %}</td>
+                  <td class="num">{{ "{:,}".format(r.total) }}</td>
+                  <td class="num">{{ "{:,}".format(r.error) if r.error else "" }}</td>
+                  <td class="num">{{ "{:,}".format(r.warn) if r.warn else "" }}</td>
+                  <td class="num">{{ "{:,}".format(r.info) if r.info else "" }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+              </table>
+            </details>
+            {% endif %}
+          </section>
+          {% endif %}
+        </div>
+      </main>
+    </div>
+  {% else %}
+    <div class="empty">
+      <div class="empty-mark">&#10003;</div>
+      <div class="empty-title">No findings</div>
+      <div class="empty-sub">This dataset passed every configured check. 0 findings.</div>
+    </div>
+  {% endif %}
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  var issues = Array.prototype.slice.call(document.querySelectorAll('.issue'));
+  var q = document.getElementById('q');
+  var qclear = document.getElementById('qclear');
+  var sevChips = Array.prototype.slice.call(document.querySelectorAll('[data-sevf]'));
+  var catItems = Array.prototype.slice.call(document.querySelectorAll('.cat-nav-item'));
+  var hideDis = document.getElementById('hideDismissed');
+  var empty = document.getElementById('empty');
+  var groupsEl = Array.prototype.slice.call(document.querySelectorAll('.group'));
+  var toast = document.getElementById('toast');
+  var triagedCount = document.getElementById('triaged-count');
+  if(!issues.length) return;
+
+  // ---- triage state: keep / dismiss / needs-review + a note, saved in this browser ----
+  var DATASET = {{ dataset|tojson }};
+  var SKEY = 'auditor-triage:' + DATASET;
+  function loadState(){ try { return JSON.parse(localStorage.getItem(SKEY)) || {}; } catch(e){ return {}; } }
+  function saveState(){ try { localStorage.setItem(SKEY, JSON.stringify(state)); } catch(e){} }
+  var state = loadState();
+  var STAT = { keep:{label:'Kept',cls:'status-resolved'}, dismiss:{label:'Dismissed',cls:'status-ignored'}, review:{label:'Needs review',cls:'status-review'} };
+  var catFilter = 'all', sevFilter = 'all';
+
+  function reflect(issue){
+    var rec = state[issue.getAttribute('data-fkey')] || {};
+    var st = rec.s || '';
+    issue.classList.toggle('issue--closed', st === 'dismiss');
+    var tag = issue.querySelector('[data-status]');
+    if(tag){
+      if(st && STAT[st]){ tag.textContent = STAT[st].label; tag.className = 'status-tag ' + STAT[st].cls; tag.style.display = ''; }
+      else { tag.textContent = ''; tag.style.display = 'none'; }
+    }
+    issue.querySelectorAll('.tact').forEach(function(b){ b.classList.toggle('tact--on', b.getAttribute('data-act') === st); });
+    var n = issue.querySelector('.tnote'); if(n && rec.n != null) n.value = rec.n;
+  }
+  function prune(key){ if(state[key] && !state[key].s && !state[key].n) delete state[key]; }
+  function counter(){
+    var d = issues.filter(function(i){ var k = state[i.getAttribute('data-fkey')]; return k && k.s; }).length;
+    if(triagedCount) triagedCount.textContent = d;
+  }
+
+  issues.forEach(function(issue){
+    var key = issue.getAttribute('data-fkey');
+    issue.querySelector('.issue-head').addEventListener('click', function(){ issue.classList.toggle('issue--open'); });
+    issue.querySelectorAll('.tact').forEach(function(b){
+      b.addEventListener('click', function(e){
+        e.stopPropagation();
+        var act = b.getAttribute('data-act');
+        state[key] = state[key] || {};
+        state[key].s = (state[key].s === act ? '' : act);
+        prune(key); saveState(); reflect(issue); counter(); apply();
+      });
+    });
+    var n = issue.querySelector('.tnote');
+    if(n){
+      n.addEventListener('click', function(e){ e.stopPropagation(); });
+      n.addEventListener('input', function(){ state[key] = state[key] || {}; state[key].n = n.value; prune(key); saveState(); });
+    }
+    reflect(issue);
+  });
+  counter();
+
+  function apply(){
+    var needle = (q.value || '').trim().toLowerCase();
+    var hideD = hideDis && hideDis.getAttribute('data-on') === 'true';
+    var any = false;
+    groupsEl.forEach(function(g){
+      if(g.classList.contains('reference')) return;
+      var catOk = catFilter === 'all' || catFilter === g.getAttribute('data-cat');
+      var shown = 0;
+      g.querySelectorAll('.issue').forEach(function(i){
+        var rec = state[i.getAttribute('data-fkey')] || {};
+        var sevOk = sevFilter === 'all' || i.getAttribute('data-sev') === sevFilter;
+        var hay = (i.getAttribute('data-msg') + ' ' + i.getAttribute('data-ev') + ' ' +
+                   i.getAttribute('data-field') + ' ' + i.getAttribute('data-check') + ' ' +
+                   i.getAttribute('data-count')).toLowerCase();
+        var m = catOk && sevOk && (!needle || hay.indexOf(needle) !== -1) && !(hideD && rec.s === 'dismiss');
+        i.style.display = m ? '' : 'none';
+        if(m) shown++;
+      });
+      g.style.display = (catOk && shown > 0) ? '' : 'none';
+      if(catOk && shown > 0) any = true;
+    });
+    if(empty) empty.style.display = any ? 'none' : '';
+  }
+
+  q.addEventListener('input', apply);
+  if(qclear) qclear.addEventListener('click', function(){ q.value = ''; apply(); });
+  sevChips.forEach(function(c){
+    c.addEventListener('click', function(){
+      sevFilter = c.getAttribute('data-sevf');
+      sevChips.forEach(function(x){ x.classList.toggle('chip--on', x === c); });
+      apply();
+    });
+  });
+  catItems.forEach(function(c){
+    c.addEventListener('click', function(){
+      catFilter = c.getAttribute('data-cat');
+      catItems.forEach(function(x){ x.classList.toggle('cat-nav-item--on', x === c); });
+      apply();
+      if(catFilter !== 'all'){ var t = document.getElementById('grp-' + catFilter); if(t) t.scrollIntoView({behavior:'smooth', block:'start'}); }
+    });
+  });
+  if(hideDis) hideDis.addEventListener('click', function(){
+    var on = hideDis.getAttribute('data-on') === 'true';
+    hideDis.setAttribute('data-on', (!on).toString());
+    hideDis.classList.toggle('chip--on', !on);
+    apply();
+  });
+
+  var ex = document.getElementById('export');
+  if(ex) ex.addEventListener('click', function(){
+    var rows = [['check','severity','field','message','evidence','rows','status','note']];
+    issues.forEach(function(i){
+      var rec = state[i.getAttribute('data-fkey')] || {};
+      rows.push([i.getAttribute('data-check'), i.getAttribute('data-sev'), i.getAttribute('data-field'),
+                 i.getAttribute('data-msg'), i.getAttribute('data-ev'), i.getAttribute('data-count'),
+                 rec.s || '', rec.n || '']);
+    });
+    var csv = rows.map(function(r){ return r.map(function(c){ c = (c == null ? '' : String(c)); return '"' + c.replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
+    var blob = new Blob([csv], {type: 'text/csv'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = 'audit-' + DATASET + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    if(toast){ toast.textContent = 'Downloaded audit-' + DATASET + '.csv'; toast.classList.add('toast--on'); setTimeout(function(){ toast.classList.remove('toast--on'); }, 2200); }
+  });
+})();
+</script>
+</body>
+</html>

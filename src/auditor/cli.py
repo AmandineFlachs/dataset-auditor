@@ -1,0 +1,158 @@
+"""Command-line interface — the single entry point a user actually touches.
+
+`auditor run` ties the whole pipeline together (load -> checks -> HTML report) so
+nobody has to import the internals. The commands are deliberately thin: each is a
+few lines delegating to ``load`` / ``checks`` / ``report``, which are the tested
+units. The CLI's own job is just argument parsing and friendly output.
+
+Installed as the ``auditor`` console script (see ``pyproject.toml``); also runnable
+as ``python -m auditor.cli``.
+"""
+
+from __future__ import annotations
+
+import webbrowser
+from collections import Counter
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+import typer
+
+from auditor.checks import run_all
+from auditor.datasets import DATASETS, DEFAULT, get
+from auditor.load import load, profile
+from auditor.report import write
+
+app = typer.Typer(
+    add_completion=False,
+    help="Audit scientific datasets for PII, unit/format issues, label noise, and duplicates.",
+)
+
+
+@app.command()
+def run(
+    dataset: Optional[str] = typer.Option(
+        None, "--dataset", "-d", help="Dataset to audit (default: the flagship). See `auditor datasets`."
+    ),
+    source: Optional[Path] = typer.Option(
+        None, "--source", "-s", help="Audit this CSV instead of the dataset's bundled file."
+    ),
+    out: Path = typer.Option(Path("report.html"), "--out", "-o", help="Where to write the HTML report."),
+    cap: int = typer.Option(50, "--cap", help="Max distinct findings shown per check in the report."),
+    open_report: bool = typer.Option(False, "--open", help="Open the report in a browser when done."),
+) -> None:
+    """Audit a dataset and write a self-contained HTML report."""
+    spec = get(dataset)
+    df = load(source, spec=spec)
+    findings = run_all(df, spec)
+    path = write(findings, spec, out, df=df, cap=cap, generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"))
+
+    by_sev = Counter(f.severity.value for f in findings)
+    breakdown = ", ".join(f"{k}={v:,}" for k, v in sorted(by_sev.items())) or "none"
+    typer.echo(f"audited {len(df):,} rows of {spec.name!r}: {len(findings):,} findings ({breakdown})")
+    typer.echo(f"wrote {path}")
+    if open_report:
+        webbrowser.open(path.resolve().as_uri())
+
+
+@app.command(name="datasets")
+def list_datasets() -> None:
+    """List the datasets the auditor knows about."""
+    for name, spec in sorted(DATASETS.items()):
+        marker = "  (default)" if spec is DEFAULT else ""
+        typer.echo(f"{name}{marker}")
+        if spec.source_url:
+            typer.echo(f"    {spec.source_url}")
+
+
+@app.command()
+def brief(
+    dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Dataset to brief."),
+    source: Optional[Path] = typer.Option(None, "--source", "-s", help="Brief this CSV instead."),
+    out: Path = typer.Option(Path("briefing.md"), "--out", "-o", help="Where to write the Markdown briefing."),
+) -> None:
+    """Write a local-LLM research briefing (column meanings, pitfalls, suggested checks).
+
+    Uses only column metadata, never raw rows. Needs a local LLM server; if none is
+    reachable the briefing is skipped (the deterministic audit is unaffected).
+    """
+    from auditor.llm import LLMTimeout
+    from auditor.research import brief as make_briefing, to_markdown
+
+    spec = get(dataset)
+    df = load(source, spec=spec)
+    try:
+        briefing = make_briefing(df, spec)
+    except LLMTimeout:
+        # Reachable but too slow to finish - say so plainly. The usual cause on a
+        # single-GPU box is VRAM oversubscription (the driver paging GPU memory to
+        # system RAM), which throttles decoding. Distinct from "no server".
+        typer.echo(
+            "local LLM reachable but the briefing timed out - the model is too slow "
+            "to finish.\nLikely VRAM pressure: restart vLLM with a lower "
+            "--gpu-memory-utilization (e.g. 0.80) and/or smaller --max-model-len, "
+            "or free GPU memory."
+        )
+        raise typer.Exit(code=1)
+    if briefing is None:
+        typer.echo("local LLM not reachable - briefing skipped (start the vLLM server first)")
+        return
+    out.write_text(to_markdown(briefing, spec), encoding="utf-8")
+    typer.echo(f"wrote briefing for {len(briefing.columns)} columns -> {out}")
+
+
+@app.command()
+def triage(
+    dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Dataset to audit then triage."),
+    source: Optional[Path] = typer.Option(None, "--source", "-s", help="Audit this CSV instead."),
+    out: Optional[Path] = typer.Option(None, "--out", "-o", help="Write the triage to this Markdown file (else print)."),
+) -> None:
+    """Run the audit, then ask the local LLM to prioritize its findings (advisory).
+
+    Collapses findings to distinct issues and has the model rank them and flag which
+    look like genuine defects vs expected artifacts. Needs a local LLM server; if none
+    is reachable the triage is skipped (the findings are unaffected).
+    """
+    from auditor.llm import LLMTimeout
+    from auditor.triage import issue_groups, to_markdown, triage as run_triage
+
+    spec = get(dataset)
+    df = load(source, spec=spec)
+    findings = run_all(df, spec)
+    groups = issue_groups(findings)
+    if not groups:
+        typer.echo("no findings to triage.")
+        return
+    try:
+        notes = run_triage(findings, spec)  # advisory layer; None if no LLM
+    except LLMTimeout:
+        typer.echo(
+            "local LLM reachable but triage timed out - the model is too slow to finish.\n"
+            "Likely VRAM pressure: restart vLLM with a lower --gpu-memory-utilization, "
+            "or free GPU memory."
+        )
+        raise typer.Exit(code=1)
+    if notes is None:
+        typer.echo("(local LLM not reachable - priority order shown without the advisory notes)")
+    # The deterministic priority/order is always produced; the LLM notes are optional.
+    md = to_markdown(notes, spec, groups)
+    if out is not None:
+        out.write_text(md, encoding="utf-8")
+        typer.echo(f"wrote triage of {len(groups)} issues -> {out}")
+    else:
+        typer.echo(md)
+
+
+@app.command(name="profile")
+def show_profile(
+    dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Dataset to profile."),
+    source: Optional[Path] = typer.Option(None, "--source", "-s", help="Profile this CSV instead."),
+) -> None:
+    """Print an exploratory profile of a dataset (no findings, just shape and smells)."""
+    spec = get(dataset)
+    typer.echo(profile(load(source, spec=spec), spec))
+
+
+if __name__ == "__main__":
+    app()

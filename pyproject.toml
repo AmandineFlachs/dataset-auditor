@@ -1,0 +1,44 @@
+[project]
+name = "dataset-auditor"
+version = "0.1.0"
+description = "Audit scientific datasets for PII, unit/format issues, label noise, and duplicates using heuristics + a local LLM."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Amandine" }]
+dependencies = [
+    # Phase 0 only needs the data contract. We add the rest as each phase
+    # arrives, so you always understand why a dependency is present.
+    "pydantic>=2.6",
+]
+
+[project.optional-dependencies]
+# Heavier deps grouped by phase. Install with e.g. `pip install -e ".[checks]"`.
+# Kept optional so the contract + tests run without downloading torch etc.
+load = ["datasets>=2.18", "pandas>=2.2"]
+# Forward-looking: the shipped checks don't import these yet. They are reserved for the
+# deferred tiers (fuzzy embedding near-dup, Presidio NER for PII) noted in ROADMAP.md.
+checks = ["sentence-transformers>=2.7", "presidio-analyzer>=2.2", "spacy>=3.7"]
+llm = ["httpx>=0.27"]            # talk to vLLM's OpenAI-compatible /v1 endpoint
+report = ["jinja2>=3.1"]
+cli = ["typer>=0.12"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+auditor = "auditor.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/AmandineFlachs/dataset-auditor"
+Repository = "https://github.com/AmandineFlachs/dataset-auditor"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# src layout: the importable package lives at src/auditor.
+packages = ["src/auditor"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

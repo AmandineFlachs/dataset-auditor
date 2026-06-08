@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Data caches (Hugging Face / local downloads)
+.cache/
+data/
+
+# Generated reports / briefings — but keep the committed sample(s) in examples/
+*.html
+!examples/*.html
+# `auditor brief` defaults to writing briefing.md in the cwd; ignore those scratch
+# outputs at the repo root while keeping the curated examples/ copies tracked.
+/briefing*.md
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Local Claude Code settings (machine-specific permission allowlist)
+.claude/

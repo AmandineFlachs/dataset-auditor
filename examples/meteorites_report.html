@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data audit: meteorites</title>
+<style>
+/* ===== TOKENS (Signal: warm paper, near-black ink, colour only for severity) ===== */
+:root{
+  --font-ui:"Hanken Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-display:"Space Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Consolas,monospace;
+
+  --paper:oklch(0.986 0.004 90);
+  --surface:oklch(0.998 0.002 90);
+  --surface-2:oklch(0.972 0.005 90);
+  --ink:oklch(0.245 0.012 60);
+  --ink-2:oklch(0.46 0.011 60);
+  --ink-3:oklch(0.63 0.008 60);
+  --line:oklch(0.905 0.006 85);
+  --line-2:oklch(0.85 0.008 85);
+  --shadow:0 1px 2px rgba(40,33,20,.04),0 4px 16px rgba(40,33,20,.05);
+  --shadow-lg:0 8px 40px rgba(40,33,20,.12);
+
+  --accent:#1c1b1a;
+  --accent-soft:color-mix(in oklab,var(--accent) 12%,transparent);
+
+  --c-critical:oklch(0.585 0.183 25);
+  --c-warning:oklch(0.745 0.135 72);
+  --c-minor:oklch(0.62 0.045 252);
+
+  --r-sm:7px; --r-md:11px; --r-lg:16px; --r-btn:9px; --bw:1px;
+  --fs:14.5px; --row-py:13px; --gap:14px; --rail-w:266px;
+
+  --bg-critical:color-mix(in oklab,var(--c-critical) 11%,var(--surface));
+  --bg-warning:color-mix(in oklab,var(--c-warning) 13%,var(--surface));
+  --bg-minor:color-mix(in oklab,var(--c-minor) 11%,var(--surface));
+  --ln-critical:color-mix(in oklab,var(--c-critical) 32%,var(--line));
+  --c-clean:oklch(0.55 0.12 155);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:var(--font-ui);font-size:var(--fs);color:var(--ink);background:var(--paper);
+  -webkit-font-smoothing:antialiased;line-height:1.45}
+.mono{font-family:var(--font-mono);font-feature-settings:"tnum" 1;letter-spacing:-.01em}
+button{font-family:inherit;color:inherit;cursor:pointer}
+a{color:var(--ink-2);text-decoration:none} a:hover{color:var(--ink);text-decoration:underline}
+h1,h2{font-family:var(--font-display);margin:0;letter-spacing:-.02em}
+::selection{background:var(--accent-soft)}
+
+/* ===== APP SHELL ===== */
+.app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.appbar{display:grid;grid-template-columns:1fr auto;align-items:center;height:58px;padding:0 16px;
+  background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0;z-index:30}
+.appbar-l{display:flex;align-items:center;gap:14px;min-width:0}
+.appbar-r{display:flex;align-items:center;justify-content:flex-end;gap:10px}
+.brand{display:flex;align-items:center;gap:9px}
+.brand-mark{width:15px;height:15px;background:var(--ink);transform:rotate(45deg);border-radius:3px}
+.brand-name{font-family:var(--font-display);font-weight:600;font-size:16px;letter-spacing:-.02em}
+.appbar-divider{width:1px;height:22px;background:var(--line-2)}
+.file-pill{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2);
+  background:var(--surface-2);border:1px solid var(--line);border-radius:99px;padding:5px 12px;min-width:0}
+.file-pill .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
+.file-pill-dot{width:6px;height:6px;border-radius:50%;background:var(--c-minor);flex-shrink:0}
+.resolved-pill{font-size:12.5px;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);
+  border-radius:99px;padding:5px 11px}
+.resolved-num{font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+.critical-flag{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--c-critical);
+  background:var(--bg-critical);border:1px solid var(--ln-critical);border-radius:99px;padding:5px 11px;font-variant-numeric:tabular-nums}
+.critical-flag[data-zero="true"]{color:var(--ink-3);background:var(--surface-2);border-color:var(--line)}
+.critical-flag[data-zero="true"] .sev-dot{background:var(--ink-3)}
+.app-body{flex:1;min-height:0;overflow:hidden}
+
+/* ===== SEVERITY PRIMITIVES ===== */
+.sev-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block}
+.sev-critical{background:var(--c-critical)} .sev-warning{background:var(--c-warning)} .sev-minor{background:var(--c-minor)}
+.cat-code{font-family:var(--font-mono);font-size:10.5px;font-weight:600;letter-spacing:.04em;color:var(--ink-3);
+  background:var(--surface-2);border:1px solid var(--line);padding:1px 5px;border-radius:4px;flex-shrink:0}
+.status-tag{font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;border:1px solid var(--line-2);white-space:nowrap}
+.status-resolved{color:var(--c-clean);background:color-mix(in oklab,var(--c-clean) 12%,var(--surface));border-color:color-mix(in oklab,var(--c-clean) 28%,var(--line))}
+.status-ignored{color:var(--ink-3);background:var(--surface-2)}
+.status-review{color:color-mix(in oklab,var(--c-warning) 70%,var(--ink));background:var(--bg-warning);border-color:color-mix(in oklab,var(--c-warning) 30%,var(--line))}
+
+/* distribution bar */
+.dist-bar{display:flex;width:100%;height:6px;border-radius:99px;overflow:hidden;background:var(--surface-2);gap:1.5px}
+.dist-seg{min-width:3px;display:flex;align-items:center;justify-content:center}
+.dist-seg span{font-size:10px;font-weight:700;color:#fff;mix-blend-mode:plus-lighter}
+.fill-critical{background:var(--c-critical)} .fill-warning{background:var(--c-warning)} .fill-minor{background:var(--c-minor)}
+
+/* ===== BUTTONS / CHIPS / SEARCH ===== */
+.btn{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;padding:8px 14px;
+  border-radius:var(--r-btn);border:1px solid transparent;transition:.15s;white-space:nowrap}
+.btn-sm{padding:6px 11px;font-size:12.5px}
+.btn-solid{background:var(--ink);color:var(--paper)}
+.btn-solid:hover{background:color-mix(in oklab,var(--ink) 86%,var(--accent))}
+.btn-ghost{background:var(--surface);color:var(--ink-2);border-color:var(--line-2)}
+.btn-ghost:hover{color:var(--ink);background:var(--surface-2);border-color:var(--ink-3)}
+.chip{font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--surface);border:1px solid var(--line-2);
+  border-radius:99px;padding:5px 13px;transition:.13s}
+.chip:hover{border-color:var(--ink-3);color:var(--ink)}
+.chip--on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.chip-critical.chip--on{background:var(--c-critical);border-color:var(--c-critical);color:#fff}
+.chip-warning.chip--on{background:var(--c-warning);border-color:var(--c-warning);color:#3a2a00}
+.chip-minor.chip--on{background:var(--c-minor);border-color:var(--c-minor);color:#fff}
+.search{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line-2);
+  border-radius:var(--r-btn);padding:0 10px;height:36px;min-width:230px;transition:.15s}
+.search:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.search-ic{color:var(--ink-3);font-size:15px}
+.search input{flex:1;border:none;background:none;outline:none;font-family:inherit;font-size:13.5px;color:var(--ink);min-width:0}
+.search input::placeholder{color:var(--ink-3)}
+.search-clear{border:none;background:none;color:var(--ink-3);font-size:18px;line-height:1;padding:0 2px}
+.search-clear:hover{color:var(--ink)}
+.sev-filters{display:flex;gap:6px;flex-wrap:wrap}
+
+/* ===== CATEGORY RAIL ===== */
+.triage{display:grid;grid-template-columns:var(--rail-w) 1fr;height:100%}
+.rail{border-right:1px solid var(--line);padding:18px 14px;overflow:auto;background:var(--surface)}
+.rail-file{padding:0 4px 14px;margin-bottom:12px;border-bottom:1px solid var(--line)}
+.rail-file-name{font-size:12.5px;font-weight:600;color:var(--ink);word-break:break-all;line-height:1.35}
+.rail-file-sub{font-size:11.5px;color:var(--ink-3);margin-top:4px}
+.rail-section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3);padding:0 4px;margin:4px 0 9px}
+.cat-nav{display:flex;flex-direction:column;gap:3px}
+.cat-nav-item{display:flex;flex-direction:column;gap:7px;text-align:left;width:100%;background:transparent;
+  border:1px solid transparent;border-radius:9px;padding:9px 11px;transition:.13s}
+.cat-nav-item:hover{background:var(--surface-2)}
+.cat-nav-item--on{background:var(--surface);border-color:var(--line-2);box-shadow:var(--shadow)}
+.cat-nav-item--on .cni-label{color:var(--ink)}
+.cni-main{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cni-label{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--ink-2);min-width:0}
+.cni-label-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cni-count{font-family:var(--font-mono);font-size:12.5px;font-weight:600;color:var(--ink-3);font-variant-numeric:tabular-nums;flex-shrink:0}
+.cat-nav-item--on .cni-count{color:var(--ink)}
+
+/* ===== STREAM ===== */
+.stream{overflow:auto;height:100%}
+.stream-head{padding:24px 32px 0;position:sticky;top:0;background:var(--paper);z-index:10}
+.stream-head-top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}
+.eyebrow{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.13em;color:var(--ink-3)}
+.stream-title{font-size:27px;font-weight:600;margin:5px 0 4px}
+.stream-byline{font-size:12.5px;color:var(--ink-3)}
+.summary-strip{display:flex;align-items:center;gap:22px;margin:20px 0 0;padding:16px 20px;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);flex-wrap:wrap}
+.ss-metric{display:flex;flex-direction:column}
+.ss-num{font-family:var(--font-display);font-size:30px;font-weight:600;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.ss-cap{font-size:11.5px;color:var(--ink-3);margin-top:4px}
+.ss-metric--clean .ss-num{color:var(--c-clean)}
+.ss-divider{width:1px;align-self:stretch;background:var(--line)}
+.ss-sevs{display:flex;flex-direction:column;gap:6px}
+.ss-sev{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)}
+.ss-sev b{color:var(--ink);font-variant-numeric:tabular-nums;min-width:30px;display:inline-block;text-align:right}
+.ss-bar{flex:1;min-width:160px}
+.stream-controls{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 0 14px;margin-top:14px;flex-wrap:wrap}
+.stream-body{padding:0 32px 80px}
+.group{margin-top:30px}
+.group.reference{margin-top:48px;border-top:1px solid var(--line);padding-top:8px}
+.group-head{margin-bottom:11px}
+.group-head-l{display:flex;align-items:center;gap:9px}
+.group-head-l h2{font-size:16px;font-weight:600}
+.group-count{font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--ink-3);
+  background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:1px 7px}
+.group-blurb{font-size:12.5px;color:var(--ink-3);margin:5px 0 0;max-width:680px}
+.more{font-size:12px;color:var(--ink-3);font-style:italic;padding:10px 2px 0}
+
+/* ===== ISSUE ROW ===== */
+.issue-list{display:flex;flex-direction:column;gap:7px}
+.issue{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;transition:box-shadow .15s}
+.issue--open{box-shadow:var(--shadow);border-color:var(--line-2)}
+.issue--closed{opacity:.6}
+.issue-head{display:flex;align-items:center;gap:12px;width:100%;background:none;border:none;
+  padding:var(--row-py) 15px var(--row-py) 0;text-align:left;position:relative}
+.issue-rail{width:3px;align-self:stretch;background:transparent;flex-shrink:0}
+.lvl-critical .issue-rail{background:var(--c-critical)}
+.lvl-warning .issue-rail{background:var(--c-warning)}
+.lvl-minor .issue-rail{background:var(--c-minor)}
+.issue-head:hover{background:var(--surface-2)}
+.issue-row-no{font-size:12px;color:var(--ink-3);min-width:62px;text-align:right;flex-shrink:0}
+.issue-title{flex:1;display:flex;align-items:center;gap:9px;font-size:13.8px;font-weight:500;min-width:0;flex-wrap:wrap}
+.field-chip{font-size:11px;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:0 6px;font-weight:500}
+.issue-meta{display:flex;align-items:center;gap:11px;flex-shrink:0}
+.chevron{font-size:18px;color:var(--ink-3);transition:transform .2s;display:inline-block;transform:rotate(90deg)}
+.issue--open .chevron{transform:rotate(-90deg);color:var(--ink)}
+.issue-detail-wrap{display:block;overflow:hidden;max-height:0}
+.issue--open .issue-detail-wrap{max-height:none}
+.issue-detail-inner{overflow:hidden}
+.issue--open .issue-detail-inner{animation:issueReveal .22s ease both}
+@keyframes issueReveal{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
+.issue-detail{padding:4px 18px 18px 18px;display:grid;grid-template-columns:1fr auto;gap:22px;align-items:end;border-top:1px solid var(--line);margin-top:2px}
+.detail-grid{display:flex;flex-direction:column;gap:14px;min-width:0}
+.found-expected{display:flex;align-items:stretch;gap:12px;flex-wrap:wrap}
+.fe-block{flex:1;min-width:170px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:9px 12px}
+.fe-found{background:var(--bg-critical);border-color:var(--ln-critical)}
+.fe-expected{background:color-mix(in oklab,var(--c-clean) 9%,var(--surface));border-color:color-mix(in oklab,var(--c-clean) 24%,var(--line))}
+.fe-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3);margin-bottom:4px}
+.fe-val{font-size:13px;font-weight:500;word-break:break-word}
+.fe-found .fe-val{color:color-mix(in oklab,var(--c-critical) 65%,var(--ink))}
+.fe-arrow{display:flex;align-items:center;color:var(--ink-3);font-size:15px}
+.detail-text{font-size:13px;color:var(--ink-2);margin:0;max-width:620px}
+.fix-label{font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.06em;color:var(--ink-3);margin-right:7px}
+.record-context{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px 18px;padding-top:12px;border-top:1px dashed var(--line-2)}
+.kv-k{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-bottom:2px}
+.kv-v{font-size:13px;color:var(--ink);font-weight:500;word-break:break-word}
+.note-wrap{padding-top:4px}
+.tnote{width:100%;max-width:620px;font-family:inherit;font-size:12.5px;color:var(--ink);background:var(--surface-2);
+  border:1px solid var(--line);border-radius:var(--r-sm);padding:7px 10px;resize:vertical}
+.tnote:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.issue-actions{display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.tact--on[data-act="keep"]{background:var(--c-clean);border-color:var(--c-clean);color:#fff}
+.tact--on[data-act="dismiss"]{background:var(--ink-3);border-color:var(--ink-3);color:var(--paper)}
+.tact--on[data-act="review"]{background:var(--c-warning);border-color:var(--c-warning);color:#3a2a00}
+
+/* ===== REFERENCE PANELS ===== */
+.ref-panel{border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;margin-bottom:12px;background:var(--surface)}
+.ref-panel>summary{padding:11px 15px;cursor:pointer;font-weight:600;font-size:13.5px;list-style:none;background:var(--surface-2)}
+.ref-panel>summary::-webkit-details-marker{display:none}
+.ref-panel>summary::before{content:"\25B8  ";color:var(--ink-3)}
+.ref-panel[open]>summary::before{content:"\25BE  "}
+.ref-panel table{width:100%;border-collapse:collapse;font-size:12.5px}
+.ref-panel th,.ref-panel td{text-align:left;padding:7px 15px;border-top:1px solid var(--line);vertical-align:top}
+.ref-panel thead th{border-top:none;color:var(--ink-3);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em}
+.ref-panel td.num,.ref-panel th.num{text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.ref-panel code{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-2)}
+
+/* ===== EMPTY / TOAST ===== */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:80px 20px;text-align:center}
+.empty--sm{padding:50px 20px}
+.empty-mark{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-size:22px;color:var(--c-clean);
+  background:color-mix(in oklab,var(--c-clean) 12%,var(--surface));border:1px solid color-mix(in oklab,var(--c-clean) 26%,var(--line))}
+.empty-title{font-family:var(--font-display);font-size:16px;font-weight:600}
+.empty-sub{font-size:13px;color:var(--ink-3)}
+.toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,16px);opacity:0;pointer-events:none;background:var(--ink);
+  color:var(--paper);font-size:13px;font-weight:500;padding:11px 18px;border-radius:10px;box-shadow:var(--shadow-lg);transition:.25s;z-index:60}
+.toast--on{opacity:1;transform:translate(-50%,0)}
+
+*::-webkit-scrollbar{width:11px;height:11px}
+*::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:99px;border:3px solid var(--paper)}
+.rail::-webkit-scrollbar-thumb{border-color:var(--surface)}
+*::-webkit-scrollbar-thumb:hover{background:var(--ink-3)}
+
+@media (max-width:820px){
+  .triage{grid-template-columns:1fr}
+  .rail{border-right:none;border-bottom:1px solid var(--line)}
+  .stream-head{padding:18px 16px 0} .stream-body{padding:0 16px 60px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="appbar">
+    <div class="appbar-l">
+      <div class="brand"><span class="brand-mark"></span><span class="brand-name">dataset-auditor</span></div>
+      <div class="appbar-divider"></div>
+      <div class="file-pill"><span class="file-pill-dot"></span><span class="mono">meteorites.csv</span></div>
+    </div>
+    <div class="appbar-r">
+      <span class="resolved-pill">triaged <span class="resolved-num" id="triaged-count">0</span></span>
+      <span class="critical-flag" data-zero="false"><span class="sev-dot sev-critical"></span>22 Needs fixing</span>
+      <button class="btn btn-ghost btn-sm" id="export">&#8615; Export</button>
+    </div>
+  </header>
+
+  <div class="app-body">
+  
+    <div class="triage">
+      <aside class="rail">
+        <div class="rail-file">
+          <div class="rail-file-name mono">meteorites.csv</div>
+          <div class="rail-file-sub">45,716 records &middot; 10 columns</div>
+        </div>
+        <div class="rail-section-label">Categories</div>
+        <nav class="cat-nav">
+          <button type="button" class="cat-nav-item cat-nav-item--on" data-cat="all">
+            <span class="cni-main"><span class="cni-label"><span class="cni-label-txt">All issues</span></span><span class="cni-count">6,239</span></span>
+          </button>
+          
+          <button type="button" class="cat-nav-item" data-cat="units.out_of_range">
+            <span class="cni-main"><span class="cni-label"><span class="cat-code">VAL</span><span class="cni-label-txt">Impossible values</span></span><span class="cni-count">22</span></span>
+            <span class="dist-bar" style="height:4px"><span class="dist-seg fill-critical" style="flex-grow:22" title="22 Needs fixing"></span></span>
+          </button>
+          
+          <button type="button" class="cat-nav-item" data-cat="units.null_island">
+            <span class="cni-main"><span class="cni-label"><span class="cat-code">VAL</span><span class="cni-label-txt">Placeholder location (0, 0)</span></span><span class="cni-count">6,214</span></span>
+            <span class="dist-bar" style="height:4px"><span class="dist-seg fill-warning" style="flex-grow:6214" title="6214 Worth a look"></span></span>
+          </button>
+          
+          <button type="button" class="cat-nav-item" data-cat="schema.high_null_rate">
+            <span class="cni-main"><span class="cni-label"><span class="cat-code">SCH</span><span class="cni-label-txt">Lots of missing values</span></span><span class="cni-count">3</span></span>
+            <span class="dist-bar" style="height:4px"><span class="dist-seg fill-warning" style="flex-grow:3" title="3 Worth a look"></span></span>
+          </button>
+          
+        </nav>
+      </aside>
+
+      <main class="stream">
+        <header class="stream-head">
+          <div class="stream-head-top">
+            <div>
+              <div class="eyebrow">Data audit</div>
+              <h1 class="stream-title">meteorites</h1>
+              <div class="stream-byline">Generated 2026-06-08 14:05 &middot; 45,716 rows audited &middot; <a href="https://raw.githubusercontent.com/pylablanche/Kaggle_Meteorites/master/meteorite-landings.csv">source</a></div>
+            </div>
+          </div>
+
+          <div class="summary-strip">
+            <div class="ss-metric"><div class="ss-num">6,239</div><div class="ss-cap">issues found</div></div>
+            <div class="ss-divider"></div>
+            <div class="ss-sevs">
+              <div class="ss-sev"><span class="sev-dot sev-critical"></span><b>22</b> Needs fixing</div>
+              <div class="ss-sev"><span class="sev-dot sev-warning"></span><b>6,217</b> Worth a look</div>
+              <div class="ss-sev"><span class="sev-dot sev-minor"></span><b>0</b> For information</div>
+            </div>
+            
+            <div class="ss-divider"></div>
+            <div class="ss-metric ss-metric--clean"><div class="ss-num">86.4%</div><div class="ss-cap">39,482 of 45,716 rows clean</div></div>
+            
+            <div class="ss-bar"><div class="dist-bar" style="height:10px"><span class="dist-seg fill-critical" style="flex-grow:22" title="22 Needs fixing"></span><span class="dist-seg fill-warning" style="flex-grow:6217" title="6217 Worth a look"><span>6217</span></span></div></div>
+          </div>
+
+          <div class="stream-controls">
+            <div class="search">
+              <span class="search-ic" aria-hidden="true">&#9906;</span>
+              <input id="q" placeholder="Search issues&hellip;" aria-label="Search issues">
+              <button type="button" class="search-clear" id="qclear" aria-label="Clear search">&times;</button>
+            </div>
+            <div class="sev-filters">
+              <button type="button" class="chip chip--on" data-sevf="all">All</button>
+              <button type="button" class="chip chip-critical" data-sevf="error">Needs fixing</button>
+              <button type="button" class="chip chip-warning" data-sevf="warn">Worth a look</button>
+              <button type="button" class="chip chip-minor" data-sevf="info">For information</button>
+              <button type="button" class="chip" id="hideDismissed" data-on="false">Hide dismissed</button>
+            </div>
+          </div>
+        </header>
+
+        <div class="stream-body">
+          
+
+          
+          <section class="group" id="grp-units.out_of_range" data-cat="units.out_of_range">
+            <div class="group-head">
+              <div class="group-head-l"><span class="cat-code">VAL</span><h2>Impossible values</h2><span class="group-count">22</span></div>
+              <p class="group-blurb">A number falls outside the range that is physically or logically possible, which usually points to a data-entry error.</p>
+            </div>
+            <div class="issue-list">
+              
+              
+              <div class="issue lvl-critical" data-fkey="97d7f582ddf4a6c3" data-cat="units.out_of_range" data-sev="error"
+                   data-check="units.out_of_range" data-field="mass_g" data-msg="mass_g is outside its plausible range (0, inf)." data-ev="mass_g=0.0" data-count="19">
+                <button type="button" class="issue-head">
+                  <span class="issue-rail"></span>
+                  <span class="sev-dot sev-critical"></span>
+                  <span class="issue-row-no mono">&times;19</span>
+                  <span class="issue-title">mass_g is outside its plausible range (0, inf).<span class="field-chip mono">mass_g</span></span>
+                  <span class="issue-meta">
+                    <span class="status-tag" data-status style="display:none"></span>
+                    <span class="chevron" aria-hidden="true">&rsaquo;</span>
+                  </span>
+                </button>
+                <div class="issue-detail-wrap"><div class="issue-detail-inner">
+                  <div class="issue-detail">
+                    <div class="detail-grid">
+                      
+                      <div class="found-expected">
+                        <div class="fe-block fe-found"><div class="fe-label">Found</div><div class="fe-val mono">mass_g=0.0</div></div>
+                        <div class="fe-arrow" aria-hidden="true">&rarr;</div>
+                        <div class="fe-block fe-expected"><div class="fe-label">Expected</div><div class="fe-val mono">within (0, inf)</div></div>
+                      </div>
+                      <p class="detail-text"><span class="fix-label">Fix</span>Likely a data-entry error; verify against the source record.</p>
+                      
+                      <p class="detail-text">Affects 19 rows &middot; 12627, 25551, 31060, 31061, 31062, 31063, 31064, 31065, 31066, 31067, 31068, 31069 and 7 more.</p>
+                      
+                      <div class="record-context">
+                        <div><div class="kv-k">name</div><div class="kv-v">Gove</div></div><div><div class="kv-k">id</div><div class="kv-v">52859</div></div><div><div class="kv-k">nametype</div><div class="kv-v">Relict</div></div><div><div class="kv-k">recclass</div><div class="kv-v">Relict iron</div></div><div><div class="kv-k">mass_g</div><div class="kv-v">0.0</div></div><div><div class="kv-k">fall</div><div class="kv-v">Found</div></div><div><div class="kv-k">year</div><div class="kv-v">1979.0</div></div><div><div class="kv-k">reclat</div><div class="kv-v">-12.26333</div></div><div><div class="kv-k">reclong</div><div class="kv-v">136.83833</div></div><div><div class="kv-k">geolocation</div><div class="kv-v">(-12.263330, 136.838330)</div></div>
+                      </div>
+                      
+                      <div class="record-context" style="border:none;padding-top:0">
+                        <div><div class="kv-k">Check</div><div class="kv-v mono">units.out_of_range</div></div>
+                      </div>
+                      <div class="note-wrap"><textarea class="tnote" rows="2" placeholder="Add a note (saved in your browser)&hellip;"></textarea></div>
+                    </div>
+                    <div class="issue-actions">
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="keep">Keep</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="dismiss">Dismiss</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="review">Needs review</button>
+                    </div>
+                  </div>
+                </div></div>
+              </div>
+              
+              
+              <div class="issue lvl-critical" data-fkey="cb52cad4bd37eccb" data-cat="units.out_of_range" data-sev="error"
+                   data-check="units.out_of_range" data-field="reclong" data-msg="reclong is outside its plausible range [-180, 180]." data-ev="reclong=354.47333" data-count="1">
+                <button type="button" class="issue-head">
+                  <span class="issue-rail"></span>
+                  <span class="sev-dot sev-critical"></span>
+                  <span class="issue-row-no mono">22946</span>
+                  <span class="issue-title">reclong is outside its plausible range [-180, 180].<span class="field-chip mono">reclong</span></span>
+                  <span class="issue-meta">
+                    <span class="status-tag" data-status style="display:none"></span>
+                    <span class="chevron" aria-hidden="true">&rsaquo;</span>
+                  </span>
+                </button>
+                <div class="issue-detail-wrap"><div class="issue-detail-inner">
+                  <div class="issue-detail">
+                    <div class="detail-grid">
+                      
+                      <div class="found-expected">
+                        <div class="fe-block fe-found"><div class="fe-label">Found</div><div class="fe-val mono">reclong=354.47333</div></div>
+                        <div class="fe-arrow" aria-hidden="true">&rarr;</div>
+                        <div class="fe-block fe-expected"><div class="fe-label">Expected</div><div class="fe-val mono">within [-180, 180]</div></div>
+                      </div>
+                      <p class="detail-text"><span class="fix-label">Fix</span>Likely a data-entry error; verify against the source record.</p>
+                      
+                      <p class="detail-text">Affects 1 row &middot; 22946.</p>
+                      
+                      <div class="record-context">
+                        <div><div class="kv-k">name</div><div class="kv-v">Meridiani Planum</div></div><div><div class="kv-k">id</div><div class="kv-v">32789</div></div><div><div class="kv-k">nametype</div><div class="kv-v">Valid</div></div><div><div class="kv-k">recclass</div><div class="kv-v">Iron, IAB complex</div></div><div><div class="kv-k">mass_g</div><div class="kv-v">&lt;missing&gt;</div></div><div><div class="kv-k">fall</div><div class="kv-v">Found</div></div><div><div class="kv-k">year</div><div class="kv-v">2005.0</div></div><div><div class="kv-k">reclat</div><div class="kv-v">-1.94617</div></div><div><div class="kv-k">reclong</div><div class="kv-v">354.47333</div></div><div><div class="kv-k">geolocation</div><div class="kv-v">(-1.946170, 354.473330)</div></div>
+                      </div>
+                      
+                      <div class="record-context" style="border:none;padding-top:0">
+                        <div><div class="kv-k">Check</div><div class="kv-v mono">units.out_of_range</div></div>
+                      </div>
+                      <div class="note-wrap"><textarea class="tnote" rows="2" placeholder="Add a note (saved in your browser)&hellip;"></textarea></div>
+                    </div>
+                    <div class="issue-actions">
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="keep">Keep</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="dismiss">Dismiss</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="review">Needs review</button>
+                    </div>
+                  </div>
+                </div></div>
+              </div>
+              
+              
+              <div class="issue lvl-critical" data-fkey="6f5436e507e7257a" data-cat="units.out_of_range" data-sev="error"
+                   data-check="units.out_of_range" data-field="year" data-msg="year is outside its plausible range (-inf, 2025]." data-ev="year=2101.0" data-count="1">
+                <button type="button" class="issue-head">
+                  <span class="issue-rail"></span>
+                  <span class="sev-dot sev-critical"></span>
+                  <span class="issue-row-no mono">30679</span>
+                  <span class="issue-title">year is outside its plausible range (-inf, 2025].<span class="field-chip mono">year</span></span>
+                  <span class="issue-meta">
+                    <span class="status-tag" data-status style="display:none"></span>
+                    <span class="chevron" aria-hidden="true">&rsaquo;</span>
+                  </span>
+                </button>
+                <div class="issue-detail-wrap"><div class="issue-detail-inner">
+                  <div class="issue-detail">
+                    <div class="detail-grid">
+                      
+                      <div class="found-expected">
+                        <div class="fe-block fe-found"><div class="fe-label">Found</div><div class="fe-val mono">year=2101.0</div></div>
+                        <div class="fe-arrow" aria-hidden="true">&rarr;</div>
+                        <div class="fe-block fe-expected"><div class="fe-label">Expected</div><div class="fe-val mono">within (-inf, 2025]</div></div>
+                      </div>
+                      <p class="detail-text"><span class="fix-label">Fix</span>Likely a data-entry error; verify against the source record.</p>
+                      
+                      <p class="detail-text">Affects 1 row &middot; 30679.</p>
+                      
+                      <div class="record-context">
+                        <div><div class="kv-k">name</div><div class="kv-v">Northwest Africa 7701</div></div><div><div class="kv-k">id</div><div class="kv-v">57150</div></div><div><div class="kv-k">nametype</div><div class="kv-v">Valid</div></div><div><div class="kv-k">recclass</div><div class="kv-v">CK6</div></div><div><div class="kv-k">mass_g</div><div class="kv-v">55.0</div></div><div><div class="kv-k">fall</div><div class="kv-v">Found</div></div><div><div class="kv-k">year</div><div class="kv-v">2101.0</div></div><div><div class="kv-k">reclat</div><div class="kv-v">0.0</div></div><div><div class="kv-k">reclong</div><div class="kv-v">0.0</div></div><div><div class="kv-k">geolocation</div><div class="kv-v">(0.000000, 0.000000)</div></div>
+                      </div>
+                      
+                      <div class="record-context" style="border:none;padding-top:0">
+                        <div><div class="kv-k">Check</div><div class="kv-v mono">units.out_of_range</div></div>
+                      </div>
+                      <div class="note-wrap"><textarea class="tnote" rows="2" placeholder="Add a note (saved in your browser)&hellip;"></textarea></div>
+                    </div>
+                    <div class="issue-actions">
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="keep">Keep</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="dismiss">Dismiss</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="review">Needs review</button>
+                    </div>
+                  </div>
+                </div></div>
+              </div>
+              
+              
+              <div class="issue lvl-critical" data-fkey="ca5fdf59320057ac" data-cat="units.out_of_range" data-sev="error"
+                   data-check="units.out_of_range" data-field="year" data-msg="year is outside its plausible range (-inf, 2025]." data-ev="year=2501.0" data-count="1">
+                <button type="button" class="issue-head">
+                  <span class="issue-rail"></span>
+                  <span class="sev-dot sev-critical"></span>
+                  <span class="issue-row-no mono">38188</span>
+                  <span class="issue-title">year is outside its plausible range (-inf, 2025].<span class="field-chip mono">year</span></span>
+                  <span class="issue-meta">
+                    <span class="status-tag" data-status style="display:none"></span>
+                    <span class="chevron" aria-hidden="true">&rsaquo;</span>
+                  </span>
+                </button>
+                <div class="issue-detail-wrap"><div class="issue-detail-inner">
+                  <div class="issue-detail">
+                    <div class="detail-grid">
+                      
+                      <div class="found-expected">
+                        <div class="fe-block fe-found"><div class="fe-label">Found</div><div class="fe-val mono">year=2501.0</div></div>
+                        <div class="fe-arrow" aria-hidden="true">&rarr;</div>
+                        <div class="fe-block fe-expected"><div class="fe-label">Expected</div><div class="fe-val mono">within (-inf, 2025]</div></div>
+                      </div>
+                      <p class="detail-text"><span class="fix-label">Fix</span>Likely a data-entry error; verify against the source record.</p>
+                      
+                      <p class="detail-text">Affects 1 row &middot; 38188.</p>
+                      
+                      <div class="record-context">
+                        <div><div class="kv-k">name</div><div class="kv-v">Ur</div></div><div><div class="kv-k">id</div><div class="kv-v">24125</div></div><div><div class="kv-k">nametype</div><div class="kv-v">Valid</div></div><div><div class="kv-k">recclass</div><div class="kv-v">Iron</div></div><div><div class="kv-k">mass_g</div><div class="kv-v">&lt;missing&gt;</div></div><div><div class="kv-k">fall</div><div class="kv-v">Found</div></div><div><div class="kv-k">year</div><div class="kv-v">2501.0</div></div><div><div class="kv-k">reclat</div><div class="kv-v">30.9</div></div><div><div class="kv-k">reclong</div><div class="kv-v">46.01667</div></div><div><div class="kv-k">geolocation</div><div class="kv-v">(30.900000, 46.016670)</div></div>
+                      </div>
+                      
+                      <div class="record-context" style="border:none;padding-top:0">
+                        <div><div class="kv-k">Check</div><div class="kv-v mono">units.out_of_range</div></div>
+                      </div>
+                      <div class="note-wrap"><textarea class="tnote" rows="2" placeholder="Add a note (saved in your browser)&hellip;"></textarea></div>
+                    </div>
+                    <div class="issue-actions">
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="keep">Keep</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="dismiss">Dismiss</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="review">Needs review</button>
+                    </div>
+                  </div>
+                </div></div>
+              </div>
+              
+            </div>
+            
+          </section>
+          
+          <section class="group" id="grp-units.null_island" data-cat="units.null_island">
+            <div class="group-head">
+              <div class="group-head-l"><span class="cat-code">VAL</span><h2>Placeholder location (0, 0)</h2><span class="group-count">6,214</span></div>
+              <p class="group-blurb">Coordinates sit at exactly (0, 0) - the usual stand-in for &#39;location unknown&#39;, not a real place in the ocean off Africa.</p>
+            </div>
+            <div class="issue-list">
+              
+              
+              <div class="issue lvl-warning" data-fkey="7622d5619767f0e5" data-cat="units.null_island" data-sev="warn"
+                   data-check="units.null_island" data-field="reclat+reclong" data-msg="Coordinates are exactly (0, 0) - a placeholder for unknown location, not a real site." data-ev="(reclat, reclong) = (0.0, 0.0)" data-count="6214">
+                <button type="button" class="issue-head">
+                  <span class="issue-rail"></span>
+                  <span class="sev-dot sev-warning"></span>
+                  <span class="issue-row-no mono">&times;6,214</span>
+                  <span class="issue-title">Coordinates are exactly (0, 0) - a placeholder for unknown location, not a real site.<span class="field-chip mono">reclat+reclong</span></span>
+                  <span class="issue-meta">
+                    <span class="status-tag" data-status style="display:none"></span>
+                    <span class="chevron" aria-hidden="true">&rsaquo;</span>
+                  </span>
+                </button>
+                <div class="issue-detail-wrap"><div class="issue-detail-inner">
+                  <div class="issue-detail">
+                    <div class="detail-grid">
+                      
+                      <div class="found-expected">
+                        <div class="fe-block fe-found"><div class="fe-label">Found</div><div class="fe-val mono">(reclat, reclong) = (0.0, 0.0)</div></div>
+                        <div class="fe-arrow" aria-hidden="true">&rarr;</div>
+                        <div class="fe-block fe-expected"><div class="fe-label">Expected</div><div class="fe-val mono">a real recovered location, not (0, 0)</div></div>
+                      </div>
+                      <p class="detail-text"><span class="fix-label">Fix</span>Treat as a missing location rather than a Gulf-of-Guinea landing.</p>
+                      
+                      <p class="detail-text">Affects 6,214 rows &middot; 37, 596, 1648, 1649, 1650, 1651, 1652, 1653, 1654, 1655, 1656, 1657 and 6,202 more.</p>
+                      
+                      <div class="record-context">
+                        <div><div class="kv-k">name</div><div class="kv-v">Northwest Africa 5815</div></div><div><div class="kv-k">id</div><div class="kv-v">50693</div></div><div><div class="kv-k">nametype</div><div class="kv-v">Valid</div></div><div><div class="kv-k">recclass</div><div class="kv-v">L5</div></div><div><div class="kv-k">mass_g</div><div class="kv-v">256.8</div></div><div><div class="kv-k">fall</div><div class="kv-v">Found</div></div><div><div class="kv-k">year</div><div class="kv-v">&lt;missing&gt;</div></div><div><div class="kv-k">reclat</div><div class="kv-v">0.0</div></div><div><div class="kv-k">reclong</div><div class="kv-v">0.0</div></div><div><div class="kv-k">geolocation</div><div class="kv-v">(0.000000, 0.000000)</div></div>
+                      </div>
+                      
+                      <div class="record-context" style="border:none;padding-top:0">
+                        <div><div class="kv-k">Check</div><div class="kv-v mono">units.null_island</div></div>
+                      </div>
+                      <div class="note-wrap"><textarea class="tnote" rows="2" placeholder="Add a note (saved in your browser)&hellip;"></textarea></div>
+                    </div>
+                    <div class="issue-actions">
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="keep">Keep</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="dismiss">Dismiss</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="review">Needs review</button>
+                    </div>
+                  </div>
+                </div></div>
+              </div>
+              
+            </div>
+            
+          </section>
+          
+          <section class="group" id="grp-schema.high_null_rate" data-cat="schema.high_null_rate">
+            <div class="group-head">
+              <div class="group-head-l"><span class="cat-code">SCH</span><h2>Lots of missing values</h2><span class="group-count">3</span></div>
+              <p class="group-blurb">A column is empty for a large share of rows, so anything that relies on it is working from partial data.</p>
+            </div>
+            <div class="issue-list">
+              
+              
+              <div class="issue lvl-warning" data-fkey="a7d4132195b91085" data-cat="schema.high_null_rate" data-sev="warn"
+                   data-check="schema.high_null_rate" data-field="reclat" data-msg="Column &#39;reclat&#39; is 16.0% null (over the 10% threshold)." data-ev="7,315 of 45,716 rows missing" data-count="1">
+                <button type="button" class="issue-head">
+                  <span class="issue-rail"></span>
+                  <span class="sev-dot sev-warning"></span>
+                  <span class="issue-row-no mono">&amp;mdash;</span>
+                  <span class="issue-title">Column &#39;reclat&#39; is 16.0% null (over the 10% threshold).<span class="field-chip mono">reclat</span></span>
+                  <span class="issue-meta">
+                    <span class="status-tag" data-status style="display:none"></span>
+                    <span class="chevron" aria-hidden="true">&rsaquo;</span>
+                  </span>
+                </button>
+                <div class="issue-detail-wrap"><div class="issue-detail-inner">
+                  <div class="issue-detail">
+                    <div class="detail-grid">
+                      
+                      <div class="found-expected">
+                        <div class="fe-block fe-found"><div class="fe-label">Found</div><div class="fe-val mono">7,315 of 45,716 rows missing</div></div>
+                        <div class="fe-arrow" aria-hidden="true">&rarr;</div>
+                        <div class="fe-block fe-expected"><div class="fe-label">Expected</div><div class="fe-val mono">at most 10% missing</div></div>
+                      </div>
+                      <p class="detail-text"><span class="fix-label">Fix</span>Decide whether to impute, drop the column, or document the gap.</p>
+                      
+                      <p class="detail-text">Affects 1 row.</p>
+                      
+                      <div class="record-context" style="border:none;padding-top:0">
+                        <div><div class="kv-k">Check</div><div class="kv-v mono">schema.high_null_rate</div></div>
+                      </div>
+                      <div class="note-wrap"><textarea class="tnote" rows="2" placeholder="Add a note (saved in your browser)&hellip;"></textarea></div>
+                    </div>
+                    <div class="issue-actions">
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="keep">Keep</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="dismiss">Dismiss</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="review">Needs review</button>
+                    </div>
+                  </div>
+                </div></div>
+              </div>
+              
+              
+              <div class="issue lvl-warning" data-fkey="9a53dbc8765d7976" data-cat="schema.high_null_rate" data-sev="warn"
+                   data-check="schema.high_null_rate" data-field="reclong" data-msg="Column &#39;reclong&#39; is 16.0% null (over the 10% threshold)." data-ev="7,315 of 45,716 rows missing" data-count="1">
+                <button type="button" class="issue-head">
+                  <span class="issue-rail"></span>
+                  <span class="sev-dot sev-warning"></span>
+                  <span class="issue-row-no mono">&amp;mdash;</span>
+                  <span class="issue-title">Column &#39;reclong&#39; is 16.0% null (over the 10% threshold).<span class="field-chip mono">reclong</span></span>
+                  <span class="issue-meta">
+                    <span class="status-tag" data-status style="display:none"></span>
+                    <span class="chevron" aria-hidden="true">&rsaquo;</span>
+                  </span>
+                </button>
+                <div class="issue-detail-wrap"><div class="issue-detail-inner">
+                  <div class="issue-detail">
+                    <div class="detail-grid">
+                      
+                      <div class="found-expected">
+                        <div class="fe-block fe-found"><div class="fe-label">Found</div><div class="fe-val mono">7,315 of 45,716 rows missing</div></div>
+                        <div class="fe-arrow" aria-hidden="true">&rarr;</div>
+                        <div class="fe-block fe-expected"><div class="fe-label">Expected</div><div class="fe-val mono">at most 10% missing</div></div>
+                      </div>
+                      <p class="detail-text"><span class="fix-label">Fix</span>Decide whether to impute, drop the column, or document the gap.</p>
+                      
+                      <p class="detail-text">Affects 1 row.</p>
+                      
+                      <div class="record-context" style="border:none;padding-top:0">
+                        <div><div class="kv-k">Check</div><div class="kv-v mono">schema.high_null_rate</div></div>
+                      </div>
+                      <div class="note-wrap"><textarea class="tnote" rows="2" placeholder="Add a note (saved in your browser)&hellip;"></textarea></div>
+                    </div>
+                    <div class="issue-actions">
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="keep">Keep</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="dismiss">Dismiss</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="review">Needs review</button>
+                    </div>
+                  </div>
+                </div></div>
+              </div>
+              
+              
+              <div class="issue lvl-warning" data-fkey="18a1206ea68fca58" data-cat="schema.high_null_rate" data-sev="warn"
+                   data-check="schema.high_null_rate" data-field="geolocation" data-msg="Column &#39;geolocation&#39; is 16.0% null (over the 10% threshold)." data-ev="7,315 of 45,716 rows missing" data-count="1">
+                <button type="button" class="issue-head">
+                  <span class="issue-rail"></span>
+                  <span class="sev-dot sev-warning"></span>
+                  <span class="issue-row-no mono">&amp;mdash;</span>
+                  <span class="issue-title">Column &#39;geolocation&#39; is 16.0% null (over the 10% threshold).<span class="field-chip mono">geolocation</span></span>
+                  <span class="issue-meta">
+                    <span class="status-tag" data-status style="display:none"></span>
+                    <span class="chevron" aria-hidden="true">&rsaquo;</span>
+                  </span>
+                </button>
+                <div class="issue-detail-wrap"><div class="issue-detail-inner">
+                  <div class="issue-detail">
+                    <div class="detail-grid">
+                      
+                      <div class="found-expected">
+                        <div class="fe-block fe-found"><div class="fe-label">Found</div><div class="fe-val mono">7,315 of 45,716 rows missing</div></div>
+                        <div class="fe-arrow" aria-hidden="true">&rarr;</div>
+                        <div class="fe-block fe-expected"><div class="fe-label">Expected</div><div class="fe-val mono">at most 10% missing</div></div>
+                      </div>
+                      <p class="detail-text"><span class="fix-label">Fix</span>Decide whether to impute, drop the column, or document the gap.</p>
+                      
+                      <p class="detail-text">Affects 1 row.</p>
+                      
+                      <div class="record-context" style="border:none;padding-top:0">
+                        <div><div class="kv-k">Check</div><div class="kv-v mono">schema.high_null_rate</div></div>
+                      </div>
+                      <div class="note-wrap"><textarea class="tnote" rows="2" placeholder="Add a note (saved in your browser)&hellip;"></textarea></div>
+                    </div>
+                    <div class="issue-actions">
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="keep">Keep</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="dismiss">Dismiss</button>
+                      <button type="button" class="btn btn-ghost btn-sm tact" data-act="review">Needs review</button>
+                    </div>
+                  </div>
+                </div></div>
+              </div>
+              
+            </div>
+            
+          </section>
+          
+
+          <div class="empty empty--sm" id="empty" style="display:none">
+            <div class="empty-mark">&#10003;</div><div class="empty-title">Nothing matches</div><div class="empty-sub">Try clearing the search or filters.</div>
+          </div>
+
+          
+          <section class="group reference">
+            <div class="group-head"><div class="group-head-l"><h2>Reference</h2></div><p class="group-blurb">The raw profile behind the findings.</p></div>
+            
+            <details class="ref-panel" id="overview">
+              <summary>Dataset overview &middot; 45,716 rows &times; 10 columns</summary>
+              <table>
+                <thead><tr><th>Column</th><th>Type</th><th class="num">% missing</th></tr></thead>
+                <tbody>
+                <tr><td><code>name</code></td><td>str</td><td class="num">0.0%</td></tr><tr><td><code>id</code></td><td>int64</td><td class="num">0.0%</td></tr><tr><td><code>nametype</code></td><td>str</td><td class="num">0.0%</td></tr><tr><td><code>recclass</code></td><td>str</td><td class="num">0.0%</td></tr><tr><td><code>mass_g</code></td><td>float64</td><td class="num">0.3%</td></tr><tr><td><code>fall</code></td><td>str</td><td class="num">0.0%</td></tr><tr><td><code>year</code></td><td>float64</td><td class="num">0.6%</td></tr><tr><td><code>reclat</code></td><td>float64</td><td class="num">16.0%</td></tr><tr><td><code>reclong</code></td><td>float64</td><td class="num">16.0%</td></tr><tr><td><code>geolocation</code></td><td>str</td><td class="num">16.0%</td></tr>
+                </tbody>
+              </table>
+              
+              <table>
+                <thead><tr><th>nametype</th><th class="num">count</th></tr></thead>
+                <tbody><tr><td><code>Valid</code></td><td class="num">45,641</td></tr><tr><td><code>Relict</code></td><td class="num">75</td></tr></tbody>
+              </table>
+              
+              <table>
+                <thead><tr><th>fall</th><th class="num">count</th></tr></thead>
+                <tbody><tr><td><code>Found</code></td><td class="num">44,609</td></tr><tr><td><code>Fell</code></td><td class="num">1,107</td></tr></tbody>
+              </table>
+              
+            </details>
+            
+            
+            <details class="ref-panel" id="by-column">
+              <summary>Findings by column &middot; most-affected first</summary>
+              <table>
+                <thead><tr><th>Column</th><th class="num">total</th><th class="num">Needs fixing</th><th class="num">Worth a look</th><th class="num">For information</th></tr></thead>
+                <tbody>
+                
+                <tr>
+                  <td><code>reclat+reclong</code></td>
+                  <td class="num">6,214</td>
+                  <td class="num"></td>
+                  <td class="num">6,214</td>
+                  <td class="num"></td>
+                </tr>
+                
+                <tr>
+                  <td><code>mass_g</code></td>
+                  <td class="num">19</td>
+                  <td class="num">19</td>
+                  <td class="num"></td>
+                  <td class="num"></td>
+                </tr>
+                
+                <tr>
+                  <td><code>reclong</code></td>
+                  <td class="num">2</td>
+                  <td class="num">1</td>
+                  <td class="num">1</td>
+                  <td class="num"></td>
+                </tr>
+                
+                <tr>
+                  <td><code>year</code></td>
+                  <td class="num">2</td>
+                  <td class="num">2</td>
+                  <td class="num"></td>
+                  <td class="num"></td>
+                </tr>
+                
+                <tr>
+                  <td><code>reclat</code></td>
+                  <td class="num">1</td>
+                  <td class="num"></td>
+                  <td class="num">1</td>
+                  <td class="num"></td>
+                </tr>
+                
+                <tr>
+                  <td><code>geolocation</code></td>
+                  <td class="num">1</td>
+                  <td class="num"></td>
+                  <td class="num">1</td>
+                  <td class="num"></td>
+                </tr>
+                
+                </tbody>
+              </table>
+            </details>
+            
+          </section>
+          
+        </div>
+      </main>
+    </div>
+  
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  var issues = Array.prototype.slice.call(document.querySelectorAll('.issue'));
+  var q = document.getElementById('q');
+  var qclear = document.getElementById('qclear');
+  var sevChips = Array.prototype.slice.call(document.querySelectorAll('[data-sevf]'));
+  var catItems = Array.prototype.slice.call(document.querySelectorAll('.cat-nav-item'));
+  var hideDis = document.getElementById('hideDismissed');
+  var empty = document.getElementById('empty');
+  var groupsEl = Array.prototype.slice.call(document.querySelectorAll('.group'));
+  var toast = document.getElementById('toast');
+  var triagedCount = document.getElementById('triaged-count');
+  if(!issues.length) return;
+
+  // ---- triage state: keep / dismiss / needs-review + a note, saved in this browser ----
+  var DATASET = "meteorites";
+  var SKEY = 'auditor-triage:' + DATASET;
+  function loadState(){ try { return JSON.parse(localStorage.getItem(SKEY)) || {}; } catch(e){ return {}; } }
+  function saveState(){ try { localStorage.setItem(SKEY, JSON.stringify(state)); } catch(e){} }
+  var state = loadState();
+  var STAT = { keep:{label:'Kept',cls:'status-resolved'}, dismiss:{label:'Dismissed',cls:'status-ignored'}, review:{label:'Needs review',cls:'status-review'} };
+  var catFilter = 'all', sevFilter = 'all';
+
+  function reflect(issue){
+    var rec = state[issue.getAttribute('data-fkey')] || {};
+    var st = rec.s || '';
+    issue.classList.toggle('issue--closed', st === 'dismiss');
+    var tag = issue.querySelector('[data-status]');
+    if(tag){
+      if(st && STAT[st]){ tag.textContent = STAT[st].label; tag.className = 'status-tag ' + STAT[st].cls; tag.style.display = ''; }
+      else { tag.textContent = ''; tag.style.display = 'none'; }
+    }
+    issue.querySelectorAll('.tact').forEach(function(b){ b.classList.toggle('tact--on', b.getAttribute('data-act') === st); });
+    var n = issue.querySelector('.tnote'); if(n && rec.n != null) n.value = rec.n;
+  }
+  function prune(key){ if(state[key] && !state[key].s && !state[key].n) delete state[key]; }
+  function counter(){
+    var d = issues.filter(function(i){ var k = state[i.getAttribute('data-fkey')]; return k && k.s; }).length;
+    if(triagedCount) triagedCount.textContent = d;
+  }
+
+  issues.forEach(function(issue){
+    var key = issue.getAttribute('data-fkey');
+    issue.querySelector('.issue-head').addEventListener('click', function(){ issue.classList.toggle('issue--open'); });
+    issue.querySelectorAll('.tact').forEach(function(b){
+      b.addEventListener('click', function(e){
+        e.stopPropagation();
+        var act = b.getAttribute('data-act');
+        state[key] = state[key] || {};
+        state[key].s = (state[key].s === act ? '' : act);
+        prune(key); saveState(); reflect(issue); counter(); apply();
+      });
+    });
+    var n = issue.querySelector('.tnote');
+    if(n){
+      n.addEventListener('click', function(e){ e.stopPropagation(); });
+      n.addEventListener('input', function(){ state[key] = state[key] || {}; state[key].n = n.value; prune(key); saveState(); });
+    }
+    reflect(issue);
+  });
+  counter();
+
+  function apply(){
+    var needle = (q.value || '').trim().toLowerCase();
+    var hideD = hideDis && hideDis.getAttribute('data-on') === 'true';
+    var any = false;
+    groupsEl.forEach(function(g){
+      if(g.classList.contains('reference')) return;
+      var catOk = catFilter === 'all' || catFilter === g.getAttribute('data-cat');
+      var shown = 0;
+      g.querySelectorAll('.issue').forEach(function(i){
+        var rec = state[i.getAttribute('data-fkey')] || {};
+        var sevOk = sevFilter === 'all' || i.getAttribute('data-sev') === sevFilter;
+        var hay = (i.getAttribute('data-msg') + ' ' + i.getAttribute('data-ev') + ' ' +
+                   i.getAttribute('data-field') + ' ' + i.getAttribute('data-check') + ' ' +
+                   i.getAttribute('data-count')).toLowerCase();
+        var m = catOk && sevOk && (!needle || hay.indexOf(needle) !== -1) && !(hideD && rec.s === 'dismiss');
+        i.style.display = m ? '' : 'none';
+        if(m) shown++;
+      });
+      g.style.display = (catOk && shown > 0) ? '' : 'none';
+      if(catOk && shown > 0) any = true;
+    });
+    if(empty) empty.style.display = any ? 'none' : '';
+  }
+
+  q.addEventListener('input', apply);
+  if(qclear) qclear.addEventListener('click', function(){ q.value = ''; apply(); });
+  sevChips.forEach(function(c){
+    c.addEventListener('click', function(){
+      sevFilter = c.getAttribute('data-sevf');
+      sevChips.forEach(function(x){ x.classList.toggle('chip--on', x === c); });
+      apply();
+    });
+  });
+  catItems.forEach(function(c){
+    c.addEventListener('click', function(){
+      catFilter = c.getAttribute('data-cat');
+      catItems.forEach(function(x){ x.classList.toggle('cat-nav-item--on', x === c); });
+      apply();
+      if(catFilter !== 'all'){ var t = document.getElementById('grp-' + catFilter); if(t) t.scrollIntoView({behavior:'smooth', block:'start'}); }
+    });
+  });
+  if(hideDis) hideDis.addEventListener('click', function(){
+    var on = hideDis.getAttribute('data-on') === 'true';
+    hideDis.setAttribute('data-on', (!on).toString());
+    hideDis.classList.toggle('chip--on', !on);
+    apply();
+  });
+
+  var ex = document.getElementById('export');
+  if(ex) ex.addEventListener('click', function(){
+    var rows = [['check','severity','field','message','evidence','rows','status','note']];
+    issues.forEach(function(i){
+      var rec = state[i.getAttribute('data-fkey')] || {};
+      rows.push([i.getAttribute('data-check'), i.getAttribute('data-sev'), i.getAttribute('data-field'),
+                 i.getAttribute('data-msg'), i.getAttribute('data-ev'), i.getAttribute('data-count'),
+                 rec.s || '', rec.n || '']);
+    });
+    var csv = rows.map(function(r){ return r.map(function(c){ c = (c == null ? '' : String(c)); return '"' + c.replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
+    var blob = new Blob([csv], {type: 'text/csv'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = 'audit-' + DATASET + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    if(toast){ toast.textContent = 'Downloaded audit-' + DATASET + '.csv'; toast.classList.add('toast--on'); setTimeout(function(){ toast.classList.remove('toast--on'); }, 2200); }
+  });
+})();
+</script>
+</body>
+</html>
