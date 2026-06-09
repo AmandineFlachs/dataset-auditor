@@ -168,20 +168,20 @@ Everything through **`v0.1.0` is ✅ done** — including the live local-LLM run
 (`brief`, `triage`, label judging) against a real vLLM server.
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph F ["Foundation"]
         direction LR
         P0["Phase 0<br/>Scaffold + Finding contract"] --> P1["Phase 1<br/>Load + profile"] --> P2["Phase 2<br/>Deterministic checks"]
     end
     subgraph G ["Generalize"]
         direction LR
-        P25["Phase 2.5<br/>Multi-dataset +<br/>LeMat-Bulk flagship"] --> P3["Phase 3<br/>LLM layer + 4 checks"]
+        P25["Phase 2.5<br/>Multi-dataset + LeMat-Bulk"] --> P3["Phase 3<br/>LLM layer + 4 checks"]
     end
     subgraph S ["Ship"]
         direction LR
         P4["Phase 4<br/>HTML triage report"] --> P5["Phase 5<br/>Package, CLI &amp; docs"]
     end
-    F --> G --> S --> REL(["v0.1.0<br/>current release"]) --> N["What's next<br/>config-file rules · fuzzy near-dup<br/>PII escalation · Streamlit UI"]
+    F --> G --> S --> REL(["v0.1.0 · current release"]) --> N["What's next<br/>config-file rules · fuzzy near-dup<br/>PII escalation · Streamlit UI"]
 
     classDef done fill:#e6f4ea,stroke:#34a853,color:#0d652d;
     classDef rel fill:#fef7e0,stroke:#f9ab00,color:#b06000;
