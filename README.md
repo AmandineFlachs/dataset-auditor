@@ -30,9 +30,18 @@ Project + OQMD + Alexandria); **NASA Meteorite Landings** is the proving ground.
 - 🧩 **Multi-dataset by design** — onboard a dataset by adding one `DatasetSpec`, not new
   check code.
 
-See a sample audit in **[`examples/`](examples/)** (open `lemat_bulk_report.html` in a
-browser).
-<!-- TODO: embed a demo GIF of the report here once recorded -->
+The report is a single self-contained HTML file — a triage dashboard with a health
+summary, a per-check category rail, and expandable findings:
+
+![The audit report overview: health summary, category rail, and grouped findings](docs/images/report-overview.png)
+
+Every finding expands to show the evidence, a **Found → Expected** comparison, the
+record context, and in-browser keep / dismiss / needs-review controls:
+
+![An expanded finding showing the Found vs Expected comparison and triage controls](docs/images/report-detail.png)
+
+See the full sample audit in **[`examples/`](examples/)** (open `lemat_bulk_report.html`
+in a browser).
 
 [lemat]: https://huggingface.co/datasets/LeMaterial/LeMat-Bulk
 
@@ -153,25 +162,50 @@ python scripts/acquire_lemat.py        # the flagship sample, across all four co
 The LeMat-Bulk script draws a reproducible random sample of the scalar science columns
 across all four configs (`compatible_pbe/pbesol/scan`, `non_compatible`).
 
-## Status
+## Roadmap
 
-| Phase | What | State |
+Everything through **`v0.1.0` is ✅ done** — including the live local-LLM runs
+(`brief`, `triage`, label judging) against a real vLLM server.
+
+```mermaid
+flowchart LR
+    subgraph F ["Foundation"]
+        direction LR
+        P0["Phase 0<br/>Scaffold + Finding contract"] --> P1["Phase 1<br/>Load + profile"] --> P2["Phase 2<br/>Deterministic checks"]
+    end
+    subgraph G ["Generalize"]
+        direction LR
+        P25["Phase 2.5<br/>Multi-dataset +<br/>LeMat-Bulk flagship"] --> P3["Phase 3<br/>LLM layer + 4 checks"]
+    end
+    subgraph S ["Ship"]
+        direction LR
+        P4["Phase 4<br/>HTML triage report"] --> P5["Phase 5<br/>Package, CLI &amp; docs"]
+    end
+    F --> G --> S --> REL(["v0.1.0<br/>current release"]) --> N["What's next<br/>config-file rules · fuzzy near-dup<br/>PII escalation · Streamlit UI"]
+
+    classDef done fill:#e6f4ea,stroke:#34a853,color:#0d652d;
+    classDef rel fill:#fef7e0,stroke:#f9ab00,color:#b06000;
+    classDef next fill:#f1f3f4,stroke:#9aa0a6,color:#3c4043,stroke-dasharray:5 4;
+    class P0,P1,P2,P25,P3,P4,P5 done
+    class REL rel
+    class N next
+```
+
+| Phase | What | Status |
 |---|---|---|
-| 0 | Scaffold + `Finding` contract | ✅ done |
-| 1 | Load + profile a dataset (meteorites, the origin) | ✅ done |
-| 2 | Deterministic checks (schema / units / exact dups) | ✅ done |
-| 2.5 | Generalize to multi-dataset + adopt **LeMat-Bulk** flagship | ✅ done |
-| 3 | LLM foundation + consistency / near-dup / PII / labels checks | ✅ done |
-| 4 | HTML report (Triage layout: rail, summary strip, expandable issues) | ✅ done |
-| 5 | Package + CLI (`auditor run`), docs | ✅ done¹ |
-| D | Live local-LLM runs (`brief`, `triage`, label judging) | ✅ done |
+| 0 | Scaffold + `Finding` contract | ✅ Done |
+| 1 | Load + profile a dataset (meteorites, the origin) | ✅ Done |
+| 2 | Deterministic checks (schema / units / exact dups) | ✅ Done |
+| 2.5 | Generalize to multi-dataset + adopt **LeMat-Bulk** flagship | ✅ Done |
+| 3 | LLM foundation + consistency / near-dup / PII / labels checks | ✅ Done |
+| 4 | HTML report (Triage layout: rail, summary strip, expandable issues) | ✅ Done |
+| 5 | Package + CLI (`auditor run`), docs | ✅ Done |
+| D | Live local-LLM runs (`brief`, `triage`, label judging) | ✅ Done |
 
-¹ Remaining for the tagged `v0.1.0` release: a demo GIF of the report for this README.
-
-### Phase 3 (done)
+### Phase 3 in detail
 
 Phase 3 added the LLM-assisted layer without compromising reusability: every new
-check is a **generic engine** configured by a `DatasetSpec`. Delivered:
+check is a **generic engine** configured by a `DatasetSpec`. Done:
 
 1. **`auditor.llm`** — a thin local-vLLM client that *degrades gracefully* when the
    server is offline (one info finding, deterministic checks untouched).
