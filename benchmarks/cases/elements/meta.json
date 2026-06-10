@@ -1,0 +1,6 @@
+{
+  "description": "Categorical plausibility: is a chemical element's labelled phase-at-STP physically plausible? A vocabulary check passes any value in {solid, liquid, gas}; only world knowledge catches mercury labelled 'solid'. This mirrors the auditor's labels.py check (it reuses build_label_prompt), demonstrated on an elements fixture because both shipped flagships leave label_rules empty.",
+  "column": "phase_at_stp",
+  "allowed": ["solid", "liquid", "gas"],
+  "domain_context": "Phase of a pure chemical element at standard temperature and pressure (STP: about 25 C and 1 atm). At STP every element is one of solid, liquid, or gas."
+}

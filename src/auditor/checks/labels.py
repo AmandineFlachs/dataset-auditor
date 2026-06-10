@@ -86,7 +86,7 @@ def _apply(df: pd.DataFrame, rule, client: LLMClient, context: str) -> list[Find
     # bounds spend. LLMUnavailable propagates to check(); LLMResponseError is local.
     for key in list(reps)[: rule.max_calls]:
         try:
-            verdict = client.judge(_prompt(rule, reps[key], ctx_cols), LabelVerdict, context=context)
+            verdict = client.judge(build_label_prompt(rule, reps[key], ctx_cols), LabelVerdict, context=context)
         except LLMResponseError:
             continue  # a malformed reply skips this case — never crash, never fabricate
         if verdict.plausible:
@@ -98,7 +98,15 @@ def _apply(df: pd.DataFrame, rule, client: LLMClient, context: str) -> list[Find
     return findings
 
 
-def _prompt(rule, row: pd.Series, ctx_cols: list[str]) -> str:
+def build_label_prompt(rule, row: pd.Series, ctx_cols: list[str]) -> str:
+    """Build the categorical-plausibility prompt for one (value, context) case.
+
+    Public because the Kaggle benchmark (``benchmarks/labels_plausibility.py``) calls
+    it to evaluate models against the *exact* prompt the check ships, so the benchmark
+    can never drift from production. The domain context is injected separately by
+    ``llm.py`` (via the ``context=`` arg to ``judge``), so it is not part of this
+    string; a caller outside the check (the benchmark) must prepend it itself.
+    """
     value = row[rule.column]
     lines = [f"Column {rule.column!r} has value {value!r} for this row."]
     if rule.allowed:

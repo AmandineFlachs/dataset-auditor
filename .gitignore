@@ -17,6 +17,11 @@ data/
 # outputs at the repo root while keeping the curated examples/ copies tracked.
 /briefing*.md
 
+# Kaggle benchmark run artifacts: local-validation output and downloaded results.
+*.run.json
+*.task.json
+results/
+
 # OS / editor
 .DS_Store
 .idea/

@@ -138,9 +138,45 @@ deterministic-vs-LLM README section, a CHANGELOG, README screenshots of the repo
 an MIT `LICENSE`, and the repo under version control (`git init`, initial `v0.1.0`
 commit). The one remaining step is the public GitHub push + `v0.1.0` tag.
 
+### v2 — Kaggle Benchmarks for the model-judgment layer ✅ (built; live cloud run pending)
+
+The report is for humans; the benchmark is for **comparing model behavior on the
+auditor's ambiguous, model-judged decisions**. The deterministic checks are facts
+(pytest covers them); this layer measures the only fallible part — the LLM judgments —
+as [Kaggle Community Benchmarks](https://www.kaggle.com/benchmarks), in `benchmarks/`.
+Two tasks, deliberately small:
+
+- **`labels-plausibility`** (showcase): can a model tell a labelled phase-at-STP is
+  wrong (mercury labelled `solid`)? It reuses the **shipped** `labels.build_label_prompt`
+  and `LabelVerdict`, so it measures production behaviour, not a copy.
+- **`triage-verdict`** (genuinely useful): can a model judge real-defect vs
+  expected-artifact — the verdict the shipped triage **withholds** because a 14B got it
+  wrong (it called the ~122 cross-functional duplicate ids a defect)? A model that
+  passes is the evidence to **re-enable that disabled feature**. Authored fresh as
+  `triage.build_verdict_prompt` / `VerdictResult`, kept out of the shipped triage path.
+
+The benchmark calls the auditor's real prompt builders so it can never drift; a pure,
+model-free `benchmarks/harness.py` loads the golden `cases/` and grades answers, unit-
+tested in `tests/test_benchmark_harness.py` (CI needs no model and no Kaggle SDK). The
+kbench wiring is validated locally with a stub model; the live run against the proxy's
+models (free within quota) needs Kaggle auth + quota. **Phase 1 is proxy models only**
+(no local-machine dependency) — Kaggle's "local dev" is about *authoring* tasks with a
+coding agent, not running models locally. See `benchmarks/README.md`.
+
 ## Deferred — what's next
 
 Parked on purpose: this is scoping without creep, and each item notes *why* it waits.
+
+- **Benchmarks Phase 2 — local-model recommender.** Reuse the same tasks, fixtures and
+  grading, but point execution at a local vLLM via `auditor.llm`, and turn the model
+  ranking into a "which local open-source model should I run for *this* dataset's
+  triage" recommendation (with VRAM-based filtering of what fits the machine). Phase 1's
+  ranking of the proxy's open-weight models pre-screens the candidates first. Deferred
+  because Phase 1 (proxy-only) is the smaller, dependency-free first step.
+- **Benchmarks — a brief-grounding task.** Grade the research `brief` for the known
+  failure modes (the `entalpic_fingerprint` hallucination, the missed `dos_ef >= 0`).
+  Deferred because it needs LLM-as-judge grading (`assess_response_with_judge`) rather
+  than a clean assertion.
 
 - **Config-file rules.** Plausibility rules now live per-dataset in
   `datasets.py` (in-code `DatasetSpec.range_rules`), not scattered through the

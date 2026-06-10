@@ -1,0 +1,4 @@
+{
+  "description": "Real-vs-expected-artifact judgement on aggregated audit issues from LeMat-Bulk. This is the verdict the shipped triage withholds (a 14B failed it, anchoring on the 'expected to be unique' message and error severity). The benchmark measures whether a better model can do it; a passing model is the evidence to reintroduce the verdict feature. Domain context is read from the real DatasetSpec (spec=lemat_bulk), not duplicated here.",
+  "spec": "lemat_bulk"
+}

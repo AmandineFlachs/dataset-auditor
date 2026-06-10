@@ -26,6 +26,8 @@ surfaces as `LLMTimeout`), and it never edits a finding.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from auditor.datasets import DatasetSpec
@@ -60,6 +62,28 @@ class TriageNotes(BaseModel):
 
     summary: str
     notes: list[IssueNote] = Field(default_factory=list)
+
+
+class VerdictResult(BaseModel):
+    """A model's real-defect-vs-expected-artifact judgement on ONE issue.
+
+    This is the verdict the shipped triage deliberately does NOT ask for (see the
+    module docstring): a 14B could not do it reliably, so it was removed rather than
+    ship a judgement that is wrong. The schema and :func:`build_verdict_prompt` exist
+    only for the Kaggle benchmark (``benchmarks/triage_verdict.py``), which measures
+    whether a *better* model can do it -- a passing model is the evidence to
+    reintroduce the verdict to the product. It is not wired into :func:`triage`.
+    """
+
+    verdict: Literal["real_defect", "expected_artifact"]
+    """Whether the flagged issue is a genuine data error or a pattern the domain
+    explains as intentional/normal."""
+
+    confidence: float = Field(ge=0.0, le=1.0)
+    """The model's self-rated confidence in the verdict."""
+
+    reason: str
+    """One sentence grounding the verdict in the domain context."""
 
 
 def triage(findings: list[Finding], spec: DatasetSpec, *, client: LLMClient | None = None) -> TriageNotes | None:
@@ -145,6 +169,49 @@ def _prompt(groups: list[dict], spec: DatasetSpec) -> str:
             lines.append(f"    e.g. {s}")
     lines.append("")
     lines.append("Return a 'summary' and a 'notes' list with one entry per issue above (use its [id]).")
+    return "\n".join(lines)
+
+
+def build_verdict_prompt(issue: dict, spec: DatasetSpec) -> str:
+    """Build the real-vs-expected verdict prompt for ONE issue (benchmark only).
+
+    ``issue`` is one group dict from :func:`issue_groups`. This is the judgement the
+    shipped triage withholds; the prompt is written to counter the exact failure that
+    got it removed -- a small model anchored on the generic check message ("expected
+    to be unique") and an ``error`` severity to call an *expected* artifact a defect.
+    So it explicitly tells the model NOT to treat "a check flagged it" or a high
+    severity as evidence of a real defect, and to lean on the domain context instead.
+
+    Like :func:`build_label_prompt`, the domain context is injected separately by
+    ``llm.py`` (``context=``), so the benchmark caller prepends ``spec.domain_context``.
+    """
+    field = issue.get("field") or "(whole dataset)"
+    lines = [
+        "An automated data-quality audit flagged the issue below on this dataset. Judge "
+        "whether it is a GENUINE DEFECT (a real error in the data) or an EXPECTED "
+        "ARTIFACT (a pattern the dataset's domain explains as intentional or normal).",
+        "",
+        "Decide from the DOMAIN CONTEXT, not from the audit's framing. The automated "
+        "checks are deliberately broad: a flagged issue, a high severity, or a message "
+        "like 'expected to be unique' is NOT evidence that the data is wrong -- some of "
+        "what the checks surface is expected behaviour the domain accounts for. Equally, "
+        "do not wave away a real error. Weigh what the field means in this dataset.",
+        "",
+        f"Dataset: {spec.name}",
+        "Issue:",
+        f"  check: {issue['check']}",
+        f"  field: {field}",
+        f"  severity: {issue['severity']}",
+        f"  affected rows: {issue['count']}",
+        f"  message: {issue['message']}",
+    ]
+    for s in issue.get("samples", []):
+        lines.append(f"  e.g. {s}")
+    lines.append("")
+    lines.append(
+        "Answer verdict='real_defect' or 'expected_artifact', a confidence in [0,1], and "
+        "a one-sentence reason grounded in the domain context."
+    )
     return "\n".join(lines)
 
 
