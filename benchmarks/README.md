@@ -64,6 +64,37 @@ each run's assertion pass-rate; if a run carries no model id (e.g. a local stub 
 falls back to the file stem, so naming downloads `<task>.<model>.run.json` keeps the
 table tidy.
 
+## Running locally, no Kaggle (`local_run.py`)
+
+`local_run.py` scores the same two tasks against a **local** LLM, with no `kbench` and no
+Kaggle auth. It reuses the model-free `harness` and the shipped prompt builders, but sends
+each case through the auditor's own `LLMClient` to a local vLLM endpoint. Same cases, same
+prompts, same grading, so a model's local score previews its Kaggle score.
+
+```bash
+AUDITOR_LLM_MODEL=Qwen/Qwen3-4B python benchmarks/local_run.py            # both tasks
+AUDITOR_LLM_MODEL=Qwen/Qwen3-4B python benchmarks/local_run.py --task verdict --timeout 180
+```
+
+### Findings so far (local Qwen3-4B)
+
+- **labels-plausibility: 11/12.** Strong; the iconic `mercury-solid` passes. The one miss
+  (`bromine-gas`) is a structured-output glitch — the model's *reason* is correct but it
+  emitted the wrong boolean. (Use a generous `--timeout`; the Qwen3 reasoning model can
+  exceed the 30s default and a timeout reads as a wrong answer.)
+- **triage-verdict: 3/5, and it seesaws.** A flat binary prompt fails one way or the other
+  depending on emphasis (over-calls "defect" or over-calls "expected"), reproducing the
+  exact instability the shipped triage docstring records for the 14B. The 4B is **not**
+  reliable enough to re-enable the verdict on a flat prompt.
+- **A fix exists, parked (not folded in — tuned on only 5 cases).** A structured
+  *domain-first* decision (quote the governing domain sentence → classify the value's
+  relation `conforms`/`violates`/`none` → map to verdict, with an `uncertain` abstention)
+  plus a grounding top-up (state in the `domain_context` that DFT energies aren't
+  comparable across functionals) took it to 4/5, stable and inspectable. The lone remaining
+  miss is `dup-immutable-id`, whose governing sentence is compound. **Revisit after adding
+  cases and/or the cross-model Kaggle run**, which is what would validate the structure
+  beyond a 5-case sample; only then fold it into `VerdictResult` / `build_verdict_prompt`.
+
 ## Open questions to confirm (per the plan)
 
 - **Which models the proxy exposes**, and whether open-weight models are included — this
