@@ -5,13 +5,13 @@ turns that flat list into a prioritized reading order plus a short orientation f
 human reviewer.
 
 Scope is deliberate, and it was set by experiment. An earlier version asked the local
-model to judge whether each issue was a *genuine defect or an expected artifact* (e.g.
-the 122 duplicate ids that are really one material across DFT functionals). A 14B model
-could not do that reliably -- it anchored on the generic check message ("this column is
-expected to be unique") and an `error` severity, and four prompt variants (including a
-few-shot worked example) did not fix it. Asking a model for a verdict it gets wrong is
-worse than not asking, so that verdict was removed. What remains is split by who is
-good at what:
+model for the pipeline's hardest call: judge whether each issue is a *genuine defect or
+an expected artifact* (e.g. the 122 duplicate ids that are really one material across DFT
+functionals). That is exactly where a model is most dangerous -- it can anchor on the
+generic check message ("this column is expected to be unique") and an `error` severity
+and confidently call an expected pattern a defect, and prompt variants did not make it
+dependable. A verdict you cannot trust is worse than no verdict, so it stays out of the
+shipped triage. What remains is split by who is good at what:
 
 * **Deterministic** (no model, never wrong): cluster findings into distinct issue
   types, and order them by severity then affected-row count. This is the priority.

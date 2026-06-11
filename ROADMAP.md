@@ -124,12 +124,12 @@ regeneration) and **exports to CSV**. Light only, fully self-contained.
 meanings, plausible ranges, pitfalls, *advisory* suggested checks) from **metadata
 only — never raw rows**. `auditor triage` ranks findings by a **deterministic**
 priority and has the model add a neutral summary + a "what to check" line per issue
-(it is *not* asked for a real-vs-expected verdict — a smaller 14B got that wrong). Both
-degrade gracefully when no server is up. These Phase D runs used **vLLM**
-(OpenAI-compatible `/v1`) serving the smaller Qwen2.5-14B-AWQ on a 24 GB GPU; the
-**current runtime is Qwen3.6-27B**. The live runs exposed a VRAM-paging gotcha (fixed with a lower
-`--gpu-memory-utilization`) and two honest model errors (one hallucinated column
-meaning, one missed unphysical value) that reinforce the advisory-only framing.
+(it is *not* asked for a real-vs-expected verdict, the most error-prone call). Both
+degrade gracefully when no server is up. These runs use **vLLM**
+(OpenAI-compatible `/v1`) serving **Qwen3-4B** locally; a small model is enough for the
+advisory-only role. The live runs exposed a VRAM-paging gotcha (fixed with a lower
+`--gpu-memory-utilization`) and honest model errors (it still mis-guesses some column
+meanings, e.g. `chemical_formula_anonymous`) that reinforce the advisory-only framing.
 
 ### Phase 5 — packaging + ship ✅
 

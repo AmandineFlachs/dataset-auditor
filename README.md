@@ -79,9 +79,9 @@ auditor triage -d lemat_bulk              # prioritize findings; LLM adds notes 
 **deterministic** priority (severity, then affected rows); a local LLM adds a plain
 summary and a "what to check" line per issue. The priority never depends on the model,
 and the order still prints if no server is running. The model is deliberately *not*
-asked to judge real-defect-vs-expected: a smaller 14B got that wrong (it called the
-expected cross-functional duplicate ids a defect to "remove"), so triage is scoped to what the
-model is reliable at — orientation and suggesting what to verify.
+asked to judge real-defect-vs-expected, the most error-prone call in the pipeline: a
+model can confidently call the expected cross-functional duplicate ids a defect to "remove",
+so triage is scoped to what the model is reliable at — orientation and suggesting what to verify.
 
 Sample reports for both flagships live in [`examples/`](examples/), alongside the
 live local-LLM research briefings (`*_briefing.md`) from `auditor brief` and the
@@ -118,7 +118,7 @@ So the LLM can *originate* a finding in exactly one opt-in place (`labels.py`), 
 only at advisory severity — it is never allowed to assert a hard error, and it cannot
 change, suppress, or re-rank a deterministic one. The audit you can defend in front of
 a scientist is the deterministic core; the LLM is there to orient and explain, and it
-is held to that on purpose (a smaller 14B confidently mis-judged an *expected* cross-functional
+is held to that on purpose (a local model can confidently mis-judge an *expected* cross-functional
 duplicate as a defect, which is exactly why triage does not let it render verdicts).
 
 ## Architecture
@@ -312,10 +312,13 @@ leaves your computer.
 The client (`auditor.llm`) and the LLM-judged check (`auditor.checks.labels`) are
 built and tested against a mocked client, and **degrade gracefully** when no server
 is running (one `info` finding; the deterministic checks are unaffected). The current
-runtime is **Qwen3.6-27B**, served by vLLM on a 24 GB GPU. The advisory-only design and
-the first live runs of `brief`, `triage`, and label judging were validated on a smaller
-**Qwen2.5-14B-AWQ** (a useful worst case, and the source of the model misjudgement noted
-above). Point the client elsewhere with `AUDITOR_LLM_BASE_URL` / `AUDITOR_LLM_MODEL`. See
+runtime is **Qwen3-4B**, served locally by vLLM. It is a deliberately small model, which
+the advisory-only design makes safe: it is asked only to orient (a summary and a "what to
+check" line per issue, plausible-range notes in `brief`), never to decide what is a real
+defect. It can still mis-state a domain fact (it labels `chemical_formula_anonymous` as
+"anonymization for privacy" when that column is really a structural-prototype formula),
+which is exactly why the model stays advisory and every hard finding is computed, not
+generated. Point the client elsewhere with `AUDITOR_LLM_BASE_URL` / `AUDITOR_LLM_MODEL`. See
 [Deterministic vs. the LLM](#deterministic-vs-the-llm) for exactly where the model is and
 isn't in the loop.
 

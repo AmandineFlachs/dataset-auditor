@@ -1,111 +1,95 @@
 # Research briefing: lemat_bulk
 
-This dataset contains DFT-computed properties of bulk inorganic crystals, including energy, magnetization, and density of states at the Fermi level. It also includes metadata about the crystal structure and computational method used.
+The dataset contains DFT-computed properties of bulk inorganic crystals, with 25,000 entries. Key columns include material identifiers, composition descriptions, and physical properties like energy and magnetization. Missing data is present in 'total_magnetization' and 'dos_ef' columns.
 
 ## Columns
 
 ### `immutable_id`
 - **Likely meaning:** Unique identifier for each material entry
-- **Plausible range:** Arbitrary string values, unique for each row
-- **Pitfalls:** None expected, as it should uniquely identify each record
+- **Pitfalls:** Duplicates or inconsistent IDs across different functionals.
 
 ### `chemical_formula_descriptive`
 - **Likely meaning:** Descriptive chemical formula of the material
-- **Plausible range:** String representations of chemical formulas, should match the other formula columns
-- **Pitfalls:** Should be consistent with chemical_formula_reduced and chemical_formula_anonymous
+- **Pitfalls:** Inconsistent or non-standard formula representations.
 
 ### `chemical_formula_reduced`
 - **Likely meaning:** Reduced chemical formula of the material
-- **Plausible range:** String representations of chemical formulas, should match the other formula columns
-- **Pitfalls:** Should be consistent with chemical_formula_descriptive and chemical_formula_anonymous
+- **Pitfalls:** Discrepancies between descriptive and reduced formulas.
 
 ### `chemical_formula_anonymous`
-- **Likely meaning:** Anonymous chemical formula of the material
-- **Plausible range:** String representations of chemical formulas, should match the other formula columns
-- **Pitfalls:** Should be consistent with chemical_formula_descriptive and chemical_formula_reduced
+- **Likely meaning:** Anonymous chemical formula for privacy or anonymization
+- **Pitfalls:** Inconsistent anonymization schemes across materials.
 
 ### `elements`
-- **Likely meaning:** List of elements present in the material
-- **Plausible range:** Comma-separated list of element symbols
-- **Pitfalls:** Should be consistent with nelements and the chemical formula columns
+- **Likely meaning:** List of elements composing the material
+- **Pitfalls:** Incorrect or incomplete element listings.
 
 ### `nelements`
-- **Likely meaning:** Number of distinct elements in the material
-- **Units:** count
-- **Plausible range:** Integer between 1 and 7
-- **Pitfalls:** Should be consistent with the elements list and chemical formula columns
+- **Likely meaning:** Number of distinct chemical elements in the material
+- **Plausible range:** 1 to 7
+- **Pitfalls:** Values outside the 1-7 range or inconsistent with other composition columns.
 
 ### `nsites`
-- **Likely meaning:** Number of sites in the crystal structure
-- **Units:** count
-- **Plausible range:** Integer between 1 and 200
-- **Pitfalls:** Should be consistent with the crystal structure and number of atoms
+- **Likely meaning:** Total number of atomic sites in the crystal structure
+- **Plausible range:** 1 to 200
+- **Pitfalls:** Values outside the 1-200 range or inconsistencies with crystal structure.
 
 ### `nperiodic_dimensions`
 - **Likely meaning:** Number of periodic dimensions in the crystal structure
-- **Units:** count
-- **Plausible range:** Integer, always 3 for bulk crystals
-- **Pitfalls:** Should always be 3 for bulk crystals
+- **Plausible range:** 3
+- **Pitfalls:** Values not equal to 3, indicating possible structural errors.
 
 ### `energy`
-- **Likely meaning:** Total DFT energy of the material
+- **Likely meaning:** Total DFT energy of the material in eV
 - **Units:** eV
-- **Plausible range:** Float between -2496 and 1804
-- **Pitfalls:** Should be consistent with nsites and physical properties
+- **Plausible range:** -2496 to 1804
+- **Pitfalls:** Unreasonably high or low values, or inconsistencies across functionals.
 
 ### `total_magnetization`
-- **Likely meaning:** Net magnetic moment of the material
+- **Likely meaning:** Net magnetic moment in Bohr magnetons
 - **Units:** Bohr magnetons
-- **Plausible range:** Float between -32.61 and 356.7
-- **Pitfalls:** May have missing values due to non-magnetic materials or incomplete calculations
+- **Plausible range:** -32.61 to 356.7
+- **Pitfalls:** Missing values, negative values for non-magnetic materials, or unrealistic magnitudes.
 
 ### `dos_ef`
-- **Likely meaning:** Density of states at the Fermi level
+- **Likely meaning:** Density of states at the Fermi level in states/eV
 - **Units:** states/eV
-- **Plausible range:** Float between -6.072 and 130.2
-- **Pitfalls:** High percentage of missing values may indicate incomplete calculations or non-metallic materials
+- **Plausible range:** -6.072 to 130.2
+- **Pitfalls:** Missing values, negative values, or values that don't align with expected physical behavior.
 
 ### `functional`
-- **Likely meaning:** DFT exchange-correlation functional used
-- **Plausible range:** String values 'pbe', 'pbesol', or 'scan'
-- **Pitfalls:** Should be consistent with the computational method used
+- **Likely meaning:** DFT exchange-correlation functional used for computation
+- **Plausible range:** pbe, pbesol, scan
+- **Pitfalls:** Invalid functional values or inconsistencies across different functionals.
 
 ### `cross_compatibility`
-- **Likely meaning:** Boolean indicating if the material is cross-compatible
-- **Units:** boolean
+- **Likely meaning:** Boolean flag indicating compatibility across different functionals
 - **Plausible range:** 0 or 1
-- **Pitfalls:** Binary value, no further unit or range issues
+- **Pitfalls:** Inconsistent values or logical contradictions with other columns.
 
 ### `entalpic_fingerprint`
-- **Likely meaning:** Entropic fingerprint of the material
-- **Plausible range:** String representation of the fingerprint
-- **Pitfalls:** Should be consistent with the material's thermodynamic properties
+- **Likely meaning:** Fingerprint or identifier for enthalpic properties
+- **Pitfalls:** Inconsistent or non-standard fingerprint representations.
 
 ### `last_modified`
-- **Likely meaning:** Timestamp of the last modification date
-- **Units:** date/time
-- **Plausible range:** Date and time strings
-- **Pitfalls:** Should be a valid date/time format
+- **Likely meaning:** Timestamp of the last modification to the material entry
+- **Units:** Date/time
+- **Pitfalls:** Invalid date formats or inconsistent modification timestamps.
 
 ## Dataset-level pitfalls
 
-- Inconsistent chemical formula representations across descriptive, reduced, and anonymous columns
-- Missing values in total_magnetization and dos_ef may indicate incomplete or inconsistent data
-- Potential inconsistencies in energy scaling with nsites
-- Cross-compatibility boolean may require additional context for interpretation
+- Missing values in 'total_magnetization' and 'dos_ef' columns may indicate incomplete data or errors in computation.
+- Inconsistent or non-standard chemical formulas across different columns may lead to data integration issues.
+- Negative values in 'total_magnetization' or 'dos_ef' could be artifacts or errors, especially for non-magnetic materials.
+- Values in 'energy' that are unreasonably high or low may indicate computational errors or incorrect scaling.
 
 ## Suggested checks (advisory — author by hand, not auto-applied)
 
-- Check that immutable_id is unique for each material entry
-- Verify consistency between chemical_formula_descriptive, chemical_formula_reduced, and chemical_formula_anonymous
-- Ensure nelements matches the count of distinct elements in the elements list
-- Validate that nperiodic_dimensions is always 3 for bulk crystals
-- Confirm that energy values are consistent with nsites and physical properties
-- Identify patterns or anomalies in missing total_magnetization and dos_ef values
-- Cross-check functional consistency with computational methods
-- Validate cross_compatibility boolean against known standards or criteria
-- Ensure entalpic_fingerprint is consistent with the material's thermodynamic properties
-- Verify that last_modified timestamps are in a valid date/time format
+- Verify that 'nperiodic_dimensions' is consistently 3 for all entries.
+- Check that 'nelements' and 'nsites' are consistent with the chemical formulas in other columns.
+- Ensure that 'functional' values are only 'pbe', 'pbesol', or 'scan' and that there are no typos.
+- Validate that 'cross_compatibility' is logically consistent with other properties, especially when functionals differ.
+- Confirm that 'last_modified' timestamps are in a valid date format and are consistent with data entry practices.
 
 ---
 *Generated locally from dataset metadata only (no raw rows). Advisory, not auto-applied.*

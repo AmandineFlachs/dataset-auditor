@@ -1,77 +1,75 @@
 # Research briefing: meteorites
 
-This dataset contains information about meteorites that have been recovered. Each row represents a single meteorite, with details such as its classification, mass, and location of recovery.
+The dataset contains information on recovered meteorites, with 45,716 rows. The data includes details such as name, ID, classification, mass, year of fall, and geographic coordinates. Some columns have missing values, particularly reclat, reclong, and geolocation. The year is a float, which may be an issue as it should be an integer. The mass is in grams, and the coordinates are in decimal degrees.
 
 ## Columns
 
 ### `name`
 - **Likely meaning:** Name of the meteorite
-- **Plausible range:** Alphanumeric string representing the name of the meteorite
-- **Pitfalls:** Potential issues include non-standard naming conventions or duplicate names.
+- **Plausible range:** Text string (no specific length constraint)
+- **Pitfalls:** Missing values are 0%, so no issues here. However, ensure that names are unique and correctly spelled.
 
 ### `id`
 - **Likely meaning:** Unique identifier for the meteorite
-- **Plausible range:** Integer ranging from 1 to 57460
-- **Pitfalls:** Possible issues include gaps in the sequence or duplicate IDs.
+- **Plausible range:** Positive integer (no specific range constraint)
+- **Pitfalls:** Values range from 1 to 57,460. Ensure that IDs are unique and correctly assigned.
 
 ### `nametype`
-- **Likely meaning:** Type of name given to the meteorite
-- **Plausible range:** Values are 'Valid' or 'Relict'
-- **Pitfalls:** Issues may arise if the values are inconsistent or incorrectly labeled.
+- **Likely meaning:** Type of name validity
+- **Plausible range:** Either 'Valid' or 'Relict'
+- **Pitfalls:** Only two possible values. Ensure that entries are correctly categorized as 'Valid' or 'Relict'.
 
 ### `recclass`
 - **Likely meaning:** Classification of the meteorite
-- **Plausible range:** String representing the classification code (e.g., L5, H6, EH4)
-- **Pitfalls:** Potential issues include incorrect classifications or inconsistent formatting.
+- **Plausible range:** Text string (e.g., 'L5', 'H6', 'EH4')
+- **Pitfalls:** Ensure that classifications follow the standard format and are correctly spelled.
 
 ### `mass_g`
 - **Likely meaning:** Mass of the meteorite in grams
 - **Units:** grams
-- **Plausible range:** Float ranging from 0 to 600,000,000 grams
-- **Pitfalls:** Issues may include negative values or unrealistic high masses.
+- **Plausible range:** Strictly positive float (e.g., 1.328e+04 grams)
+- **Pitfalls:** Values can be zero, which is invalid. Ensure that mass is strictly positive.
 
 ### `fall`
 - **Likely meaning:** Whether the meteorite fell or was found
-- **Plausible range:** Values are 'Found' or 'Fell'
-- **Pitfalls:** Potential issues include inconsistent labeling or incorrect categorization.
+- **Plausible range:** Either 'Fell' or 'Found'
+- **Pitfalls:** Ensure that entries are correctly categorized as 'Fell' or 'Found'.
 
 ### `year`
-- **Likely meaning:** Year the meteorite was found or fell
-- **Units:** years
-- **Plausible range:** Float ranging from 301 to 2501 years
-- **Pitfalls:** Issues may include future dates or unrealistic historical dates.
+- **Likely meaning:** Year the meteorite fell or was found
+- **Plausible range:** Integer between 301 and 2501
+- **Pitfalls:** The data type is float, which may be an issue. Ensure that the year is an integer and not in the future.
 
 ### `reclat`
-- **Likely meaning:** Latitude of the recovery site
+- **Likely meaning:** Latitude of the recovery location
 - **Units:** decimal degrees
-- **Plausible range:** Float ranging from -90 to 90 degrees
-- **Pitfalls:** Potential issues include out-of-range values or missing data.
+- **Plausible range:** Between -90 and 90
+- **Pitfalls:** 16% missing. Ensure that values are within the valid range for latitude and that missing values are properly handled.
 
 ### `reclong`
-- **Likely meaning:** Longitude of the recovery site
+- **Likely meaning:** Longitude of the recovery location
 - **Units:** decimal degrees
-- **Plausible range:** Float ranging from -180 to 180 degrees
-- **Pitfalls:** Issues may include out-of-range values or missing data.
+- **Plausible range:** Between -180 and 180
+- **Pitfalls:** 16% missing. Ensure that values are within the valid range for longitude and that missing values are properly handled.
 
 ### `geolocation`
-- **Likely meaning:** Geographic location of the recovery site
-- **Units:** latitude and longitude
-- **Plausible range:** String representation of latitude and longitude
-- **Pitfalls:** Potential issues include missing data or invalid coordinate pairs.
+- **Likely meaning:** Geolocation information (possibly a string representation of coordinates)
+- **Plausible range:** Text string (no specific length constraint)
+- **Pitfalls:** 16% missing. Ensure that geolocation data is consistent with reclat and reclong, and that missing values are properly handled.
 
 ## Dataset-level pitfalls
 
-- Missing or inconsistent data in the geolocation field.
-- Incorrect or inconsistent classification codes in the recclass field.
-- Unrealistic or impossible values in the mass_g field.
-- Future dates or unrealistic historical dates in the year field.
+- The year is stored as a float, which may be an issue as it should be an integer.
+- reclat and reclong have 16% missing values. Ensure that missing values are properly handled and that the data is consistent with the coordinates.
+- geolocation has 16% missing values. Ensure that geolocation data is consistent with reclat and reclong, and that missing values are properly handled.
 
 ## Suggested checks (advisory — author by hand, not auto-applied)
 
-- Check for missing or inconsistent data in the geolocation field.
-- Verify the consistency and correctness of classification codes in the recclass field.
-- Validate the plausibility of mass values in the mass_g field.
-- Ensure the year field does not contain future dates or unrealistic historical dates.
+- Check that the 'year' column contains only integer values (no decimal points).
+- Verify that 'reclat' and 'reclong' values are within the valid ranges of -90 to 90 and -180 to 180, respectively.
+- Ensure that 'geolocation' data is consistent with 'reclat' and 'reclong' when both are present.
+- Confirm that 'mass_g' is strictly positive (no zero or negative values).
+- Check that 'nametype' and 'fall' columns only contain the values 'Valid'/'Relict' and 'Fell'/'Found', respectively.
 
 ---
 *Generated locally from dataset metadata only (no raw rows). Advisory, not auto-applied.*

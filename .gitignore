@@ -17,6 +17,10 @@ data/
 # outputs at the repo root while keeping the curated examples/ copies tracked.
 /briefing*.md
 
+# Social / marketing assets — kept in-repo for convenience but not part of the
+# published project (rendered card + crops live here, regenerated from explainer.html).
+docs/social/
+
 # OS / editor
 .DS_Store
 .idea/
