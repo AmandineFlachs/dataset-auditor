@@ -11,6 +11,7 @@ as ``python -m auditor.cli``.
 
 from __future__ import annotations
 
+import os
 import webbrowser
 from collections import Counter
 from datetime import datetime
@@ -28,6 +29,18 @@ app = typer.Typer(
     add_completion=False,
     help="Audit scientific datasets for PII, unit/format issues, label noise, and duplicates.",
 )
+
+
+def _use_model(model: Optional[str]) -> None:
+    """Point the LLM layer at ``model`` for this process, via the standard env carrier.
+
+    ``AUDITOR_LLM_MODEL`` is the single carrier of "the chosen model" across every stage
+    (``LLMClient.from_env`` reads it), so a ``--model`` flag just sets it here, leaving
+    each command's own timeout intact. The model a user lands on via ``select-model``
+    flows into ``brief``/``triage`` this way.
+    """
+    if model:
+        os.environ["AUDITOR_LLM_MODEL"] = model
 
 
 @app.command()
@@ -52,6 +65,11 @@ def run(
     breakdown = ", ".join(f"{k}={v:,}" for k, v in sorted(by_sev.items())) or "none"
     typer.echo(f"audited {len(df):,} rows of {spec.name!r}: {len(findings):,} findings ({breakdown})")
     typer.echo(f"wrote {path}")
+    if findings:
+        typer.echo(
+            f"next: review {path.name}, keep/dismiss issues, click 'Export decisions', "
+            f"then `auditor capture <file> -d {spec.name}`"
+        )
     if open_report:
         webbrowser.open(path.resolve().as_uri())
 
@@ -71,6 +89,7 @@ def brief(
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Dataset to brief."),
     source: Optional[Path] = typer.Option(None, "--source", "-s", help="Brief this CSV instead."),
     out: Path = typer.Option(Path("briefing.md"), "--out", "-o", help="Where to write the Markdown briefing."),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Local model to use (default: AUDITOR_LLM_MODEL)."),
 ) -> None:
     """Write a local-LLM research briefing (column meanings, pitfalls, suggested checks).
 
@@ -80,6 +99,7 @@ def brief(
     from auditor.llm import LLMTimeout
     from auditor.research import brief as make_briefing, to_markdown
 
+    _use_model(model)
     spec = get(dataset)
     df = load(source, spec=spec)
     try:
@@ -107,6 +127,7 @@ def triage(
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Dataset to audit then triage."),
     source: Optional[Path] = typer.Option(None, "--source", "-s", help="Audit this CSV instead."),
     out: Optional[Path] = typer.Option(None, "--out", "-o", help="Write the triage to this Markdown file (else print)."),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Local model to use (default: AUDITOR_LLM_MODEL)."),
 ) -> None:
     """Run the audit, then ask the local LLM to prioritize its findings (advisory).
 
@@ -117,6 +138,7 @@ def triage(
     from auditor.llm import LLMTimeout
     from auditor.triage import issue_groups, to_markdown, triage as run_triage
 
+    _use_model(model)
     spec = get(dataset)
     df = load(source, spec=spec)
     findings = run_all(df, spec)
