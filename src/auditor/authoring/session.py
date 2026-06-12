@@ -54,7 +54,7 @@ def run_session(
     for cand in candidates:
         evidence = dry_run(cand, df)
         band = classify(cand, evidence)
-        resolution = _resolve(cand, evidence, band, autonomy)
+        resolution = _resolve(cand, evidence, band, autonomy, df)
         if resolution.final is not None:
             accepted.append(resolution.final)
         log.append({
@@ -73,14 +73,14 @@ def run_session(
     return SessionResult(accepted=accepted, fragment=emit_fragment(accepted, spec.name), log=log)
 
 
-def _resolve(cand, evidence, band, autonomy):
+def _resolve(cand, evidence, band, autonomy, df):
     """Route one candidate by the autonomy dial (the dial's whole job)."""
     if autonomy == "ask-all":
-        return ask_human(cand, evidence)
+        return ask_human(cand, evidence, df)
     if autonomy == "hands-off":
         return model_decide(cand, evidence)
     # balanced: auto-decide the safe band, ask the human about the rest.
-    return model_decide(cand, evidence) if band == "auto-safe" else ask_human(cand, evidence)
+    return model_decide(cand, evidence) if band == "auto-safe" else ask_human(cand, evidence, df)
 
 
 def emit_fragment(accepted: list[Candidate], dataset: str) -> str:

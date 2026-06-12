@@ -122,6 +122,34 @@ def test_format_question_mentions_impact():
     assert "flags 2 of 4 rows" in format_question(cand, dry_run(cand, _df()))
 
 
+# -- ask_human edit path: re-dry-run before adopting --------------------------
+
+
+def _patch_typer(monkeypatch, prompts, confirm):
+    import typer
+    answers = iter(prompts)
+    monkeypatch.setattr(typer, "prompt", lambda *a, **k: next(answers))
+    monkeypatch.setattr(typer, "confirm", lambda *a, **k: confirm)
+    monkeypatch.setattr(typer, "echo", lambda *a, **k: None)
+
+
+def test_edit_redryruns_and_adopts_on_confirm(monkeypatch):
+    from auditor.authoring.resolve import ask_human
+    cand = _cand(kind="range", column="mass_g", min=0, exclusive_min=True)  # original flags 2/4
+    _patch_typer(monkeypatch, prompts=["e", "", "100"], confirm=True)       # edit to max=100
+    res = ask_human(cand, dry_run(cand, _df()), _df())
+    assert res.action == "edit" and res.final.max == 100
+    assert "flags 0 rows" in res.note  # re-dry-run actually ran: 2 -> 0 under the new bound
+
+
+def test_edit_rejected_after_redryrun_skips(monkeypatch):
+    from auditor.authoring.resolve import ask_human
+    cand = _cand(kind="range", column="mass_g", min=0, exclusive_min=True)
+    _patch_typer(monkeypatch, prompts=["e", "0", "2025"], confirm=False)    # see impact, reject
+    res = ask_human(cand, dry_run(cand, _df()), _df())
+    assert res.action == "skip" and "rejected" in res.note
+
+
 # -- propose via mocked transport ---------------------------------------------
 
 

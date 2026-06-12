@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from auditor.authoring.dryrun import Evidence
+from auditor.authoring.dryrun import Evidence, dry_run
 from auditor.authoring.proposals import Candidate
 
 # Decision thresholds (slice heuristics; the authoring benchmark hardens these later).
@@ -69,23 +69,28 @@ def model_decide(candidate: Candidate, evidence: Evidence) -> Resolution:
                       f"{evidence.flag_count} rows ({pct}), a plausible rate.")
 
 
+def impact(evidence: Evidence) -> str:
+    """One-line 'if applied' impact for a dry-run (shared by the question and edit feedback)."""
+    if not evidence.flag_count:
+        return "flags nothing now (a forward guard)."
+    eg = f"  e.g. {', '.join(evidence.samples)}" if evidence.samples else ""
+    return f"flags {evidence.flag_count} of {_total(evidence)} rows ({evidence.flag_rate:.2%}).{eg}"
+
+
 def format_question(candidate: Candidate, evidence: Evidence) -> str:
     """The human-facing question block for one candidate (also used in the auto report)."""
     head = f"[{candidate.kind}] propose: {candidate.describe()}"
     why = f"  why: {candidate.rationale} (model confidence {candidate.confidence:.2f})"
-    if evidence.flag_count:
-        eg = f"  e.g. {', '.join(evidence.samples)}" if evidence.samples else ""
-        impact = f"  if applied: flags {evidence.flag_count} of {_total(evidence)} rows ({evidence.flag_rate:.2%}).{eg}"
-    else:
-        impact = "  if applied: flags nothing now (a forward guard)."
-    return "\n".join([head, why, impact])
+    return "\n".join([head, why, f"  if applied: {impact(evidence)}"])
 
 
-def ask_human(candidate: Candidate, evidence: Evidence) -> Resolution:
+def ask_human(candidate: Candidate, evidence: Evidence, df) -> Resolution:
     """Show the question and act on the reviewer's choice (interactive).
 
-    Accept adopts the rule; Edit (range only) takes new min/max; Skip declines; "You choose"
-    delegates to :func:`model_decide` -- the same brain the auto path uses, logged as model.
+    Accept adopts the rule; Edit (range only) takes new min/max, RE-DRY-RUNS the edited
+    bounds and shows their real impact before the reviewer confirms (so a fumbled edit is
+    caught, not shipped silently); Skip declines; "You choose" delegates to
+    :func:`model_decide` -- the same brain the auto path uses, logged as model.
     """
     import typer
 
@@ -96,18 +101,27 @@ def ask_human(candidate: Candidate, evidence: Evidence) -> Resolution:
     if choice == "a":
         return Resolution("human", "accept", candidate, "accepted by reviewer")
     if choice == "e" and candidate.kind == "range":
-        lo = typer.prompt("    min (blank = none)", default="", show_default=False).strip()
-        hi = typer.prompt("    max (blank = none)", default="", show_default=False).strip()
-        edited = candidate.model_copy(update={
-            "min": float(lo) if lo else None,
-            "max": float(hi) if hi else None,
-        })
-        if edited.range_params():
-            return Resolution("human", "edit", edited, "edited by reviewer")
-        return Resolution("human", "skip", None, "edited to no bound -> skipped")
+        return _edit(candidate, df, typer)
     if choice == "s":
         return Resolution("human", "skip", None, "skipped by reviewer")
     return model_decide(candidate, evidence)  # "you choose"
+
+
+def _edit(candidate: Candidate, df, typer) -> Resolution:
+    """Take new bounds, re-dry-run them, show the impact, and confirm before adopting."""
+    lo = typer.prompt("    min (blank = none)", default="", show_default=False).strip()
+    hi = typer.prompt("    max (blank = none)", default="", show_default=False).strip()
+    edited = candidate.model_copy(update={
+        "min": float(lo) if lo else None,
+        "max": float(hi) if hi else None,
+    })
+    if not edited.range_params():
+        return Resolution("human", "skip", None, "edited to no bound -> skipped")
+    new_ev = dry_run(edited, df)
+    typer.echo(f"    edited -> {impact(new_ev)}")
+    if typer.confirm("    adopt this edited rule?", default=True):
+        return Resolution("human", "edit", edited, f"edited by reviewer; now flags {new_ev.flag_count} rows")
+    return Resolution("human", "skip", None, "edited rule rejected after re-dry-run")
 
 
 def _total(evidence: Evidence) -> int:
