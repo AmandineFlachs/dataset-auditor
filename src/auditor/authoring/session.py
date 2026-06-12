@@ -1,10 +1,11 @@
 """Drive one authoring session: propose -> dry-run -> classify -> resolve -> emit.
 
-This is the loop the ``auditor author`` command runs. It honors the ``--autonomy`` dial by
-choosing, per candidate, whether to ask the human or let :func:`model_decide` settle it --
-the dial is the only thing that changes, because "you choose" and auto-resolution are the
-same function (see ``resolve``). The output is a ``range_rules`` spec fragment plus a JSON
-decision log, so every adopted rule is traceable to who decided it and the evidence they saw.
+This is the loop ``auditor author`` runs. It honors the ``--autonomy`` dial by choosing, per
+candidate, whether to ask the human or let :func:`model_decide` settle it -- the dial is the
+only thing that changes, because "you choose" and auto-resolution are the same function (see
+``resolve``). The output is a ``DatasetSpec`` fragment (one section per rule kind adopted)
+plus a JSON decision log, so every adopted rule is traceable to who decided it and the
+evidence they saw.
 """
 
 from __future__ import annotations
@@ -22,9 +23,9 @@ AUTONOMY = ("ask-all", "balanced", "hands-off")
 
 @dataclass
 class SessionResult:
-    """What a session produced: the adopted rules, the emitted fragment, and the log."""
+    """What a session produced: the adopted candidates, the emitted fragment, and the log."""
 
-    accepted: dict = field(default_factory=dict)  # column -> range_rules params
+    accepted: list[Candidate] = field(default_factory=list)
     fragment: str = ""
     log: list[dict] = field(default_factory=list)
 
@@ -37,7 +38,7 @@ def run_session(
     client=None,
     candidates: list[Candidate] | None = None,
 ) -> SessionResult:
-    """Propose range rules and resolve each one under ``autonomy``.
+    """Propose rules and resolve each under ``autonomy``.
 
     ``candidates`` can be injected (for tests / a precomputed proposal); otherwise they are
     proposed from the live model. With no model and no injection there is nothing to do, and
@@ -48,18 +49,17 @@ def run_session(
     if candidates is None:
         candidates = propose(df, spec, client=client)
 
-    accepted: dict = {}
+    accepted: list[Candidate] = []
     log: list[dict] = []
     for cand in candidates:
         evidence = dry_run(cand, df)
         band = classify(cand, evidence)
         resolution = _resolve(cand, evidence, band, autonomy)
-        if resolution.action in ("accept", "edit") and resolution.final_params:
-            accepted[cand.column] = resolution.final_params
+        if resolution.final is not None:
+            accepted.append(resolution.final)
         log.append({
-            "column": cand.column,
             "kind": cand.kind,
-            "proposed": cand.params(),
+            "rule": cand.describe(),
             "rationale": cand.rationale,
             "confidence": cand.confidence,
             "flag_count": evidence.flag_count,
@@ -68,7 +68,6 @@ def run_session(
             "band": band,
             "decided_by": resolution.decided_by,
             "action": resolution.action,
-            "final_params": resolution.final_params,
             "note": resolution.note,
         })
     return SessionResult(accepted=accepted, fragment=emit_fragment(accepted, spec.name), log=log)
@@ -84,14 +83,44 @@ def _resolve(cand, evidence, band, autonomy):
     return model_decide(cand, evidence) if band == "auto-safe" else ask_human(cand, evidence)
 
 
-def emit_fragment(accepted: dict, dataset: str) -> str:
-    """Render adopted rules as a ``range_rules=`` snippet pasteable into a DatasetSpec."""
+def emit_fragment(accepted: list[Candidate], dataset: str) -> str:
+    """Render adopted candidates as DatasetSpec fields, one section per rule kind.
+
+    The output is valid Python (with the needed rule-class imports) that pastes into a spec.
+    """
+    by_kind: dict[str, list[Candidate]] = {}
+    for c in accepted:
+        by_kind.setdefault(c.kind, []).append(c)
     if not accepted:
-        return f"# no range rules adopted for {dataset!r}\nrange_rules={{}}\n"
-    lines = [f"# range_rules authored for {dataset!r} (paste into its DatasetSpec)", "range_rules={"]
-    for col, params in accepted.items():
-        lines.append(f"    {col!r}: {params!r},")
-    lines.append("}")
+        return f"# no rules adopted for {dataset!r}\n"
+
+    imports = [n for k, n in (("consistency", "ConsistencyRule"),
+                              ("near_dup", "NearDupRule"),
+                              ("formula", "FormulaRule")) if k in by_kind]
+    lines = [f"# DatasetSpec fields authored for {dataset!r} (paste into its spec)"]
+    if imports:
+        lines.append(f"from auditor.datasets import {', '.join(sorted(imports))}")
+    lines.append("")
+
+    if "range" in by_kind:
+        lines.append("range_rules={")
+        for c in by_kind["range"]:
+            lines.append(f"    {c.column!r}: {c.range_params()!r},")
+        lines.append("}")
+    if "key" in by_kind:
+        keys = by_kind["key"]
+        lines.append(f"key_column={keys[0].column!r}")
+        if len(keys) > 1:
+            others = ", ".join(repr(k.column) for k in keys[1:])
+            lines.append(f"# note: also proposed as key but key_column is singular: {others}")
+    for kind, fieldname in (("consistency", "consistency_rules"),
+                            ("near_dup", "near_dup_rules"),
+                            ("formula", "formula_rules")):
+        if kind in by_kind:
+            lines.append(f"{fieldname}=(")
+            for c in by_kind[kind]:
+                lines.append(f"    {c.to_rule()!r},")
+            lines.append(")")
     return "\n".join(lines) + "\n"
 
 
