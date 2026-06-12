@@ -109,43 +109,48 @@ kaggle b init -y                                       # refresh .env proxy cred
 PYTHONIOENCODING=utf-8 python benchmarks/proxy_sweep.py
 ```
 
-### Scoreboard (2026-06-11)
+### Scoreboard (2026-06-12, after two case/grounding fixes)
 
 | model | labels | triage-verdict | overall |
 |---|---|---|---|
-| claude-haiku-4.5 | 12/12 | 5/5 | **17/17** |
-| deepseek-v3.2 | 12/12 | 4/5 | 16/17 |
-| gemini-3-flash | 12/12 | 4/5 | 16/17 |
-| gemini-3.1-flash-lite | 12/12 | 4/5 | 16/17 |
-| qwen3-next-80b | 12/12 | 4/5 | 16/17 |
-| glm-5 | 12/12 | 4/5 | 16/17 |
-| gpt-oss-120b | — | — | 12/17 \* |
+| claude-haiku-4-5 | 12/12 | 5/5 | **17/17** |
+| deepseek-v3.2 | 12/12 | 5/5 | **17/17** |
+| gemini-3-flash | 12/12 | 5/5 | **17/17** |
+| gemini-3.1-flash-lite | 12/12 | 5/5 | **17/17** |
+| qwen3-next-80b | 12/12 | 5/5 | **17/17** |
+| glm-5 | 12/12 | 5/5 | **17/17** |
+| gpt-oss-120b | 7/12 | 5/5 | 12/17 \* |
 
-\* gpt-oss-120b's misses were dominated by **structured-output** failures (4 cases where it
-could not emit the schema cleanly), not judgment errors — a format-compliance signal, not a
-reasoning one.
+\* gpt-oss-120b's misses are all **structured-output** failures on labels (it cannot reliably
+emit the schema; the count varies run-to-run, 7–9/12), not judgment errors — a
+format-compliance signal, not a reasoning one. Its verdict score is a clean 5/5.
 
-What it taught us:
+What the sweep taught us:
 
-- **The withheld verdict is model-limited, not broken.** Claude Haiku 4.5 scores **5/5 on
-  the verdict task using the shipped flat prompt** — no structural change, no grounding
-  top-up. The 4B's seesaw is a capability floor, not a task flaw. This is the concrete
-  evidence the verdict feature *could* be re-enabled, gated on a sufficiently capable model.
-- **`triage-verdict` discriminates; `labels` saturates.** Labels maxes at 12/12 for every
-  capable model (a good regression guard, weak ranking signal). The verdict task is where
-  models actually separate, so that is the set worth growing.
-- **It localized one grounding gap to a single sentence.** The 4/5 models all miss the same
-  case — `energy-spread` — and for a defensible reason: the old `domain_context` said
-  computed properties "should be physically consistent", and they followed it. Only Claude
-  reached outside the prompt to DFT knowledge (energies aren't comparable across
-  functionals). **This is now fixed in the spec**: `lemat_bulk.domain_context` states that
-  pbe/pbesol/scan use different energy references, so an energy spread across rows sharing an
-  `immutable_id` is expected physics. The scoreboard above predates that fix; re-running the
-  sweep should lift the 16/17 models toward 17/17 on grounding alone.
+- **The withheld verdict is reliably doable — re-enable it, gated on a capable model.** Every
+  capable model scores **5/5 on triage-verdict using the shipped flat prompt**, no structural
+  change. The local 4B's seesaw is a capability floor, not a task flaw. This is the concrete
+  evidence to reintroduce the verdict feature that `triage.py` currently withholds.
+- **It localized one grounding gap to a single sentence (now fixed).** Pre-fix, five models
+  missed `energy-spread` for a defensible reason: the old `domain_context` said computed
+  properties "should be physically consistent", and they followed it. `lemat_bulk.domain_context`
+  now states pbe/pbesol/scan use different energy references, so an energy spread across rows
+  sharing an `immutable_id` is expected physics. Post-fix, **all seven models call it correctly.**
+- **It caught a mislabeled benchmark case — the sweep's best moment.** Three capable models
+  scored the *old* `formula-mismatch` case "wrong" with identical, correct chemistry: its
+  sample `descriptive=Cd2In2P2 / reduced=CdInP` is a **valid GCD reduction** (both are 1:1:1),
+  not a contradiction — and the real `formula.check` reduces both columns before comparing, so
+  it would *not* fire on that row. The ground truth was wrong; the models were right. The case
+  now uses a genuine contradiction (`reduced=Cd2InP`, i.e. 2:1:1 vs the descriptive's 1:1:1),
+  which the real check *does* flag. When several capable models agree against the label for the
+  same sound reason, suspect the label — that is exactly what a cross-model sweep is for.
 
-Honest caveat: this is **17 assertions** (12 + 5). The design is drift-proof (it runs the
-shipped builders), but the *rankings* stay advisory until the case set grows — `triage-verdict`
-especially. A strong and a weak model scoring the same is the signal to add cases.
+Honest caveat: this is **17 assertions** (12 + 5), and with both fixes in the verdict task now
+**saturates** for capable models (all 5/5) — good evidence for the re-enable decision, but it
+no longer *ranks* capable models. To recover discriminating power, the verdict set needs
+genuinely harder cases (the prior "discrimination" was partly the bad case penalizing correct
+chemistry). The design stays drift-proof (it runs the shipped builders); the case set is what
+needs to grow.
 
 ## Open questions to confirm (per the plan)
 

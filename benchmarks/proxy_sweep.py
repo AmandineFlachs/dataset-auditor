@@ -14,12 +14,36 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 import pathlib
 import sys
+import time
 
 _HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
 sys.path.insert(0, str(_HERE.parent / "src"))
+
+
+def _load_env() -> None:
+    """Load the repo-root ``.env`` into the environment before importing kbench.
+
+    ``kaggle b init`` writes ``.env`` at the repo root, but kbench discovers it relative
+    to the entry script's directory (``benchmarks/`` when this file is run directly), not
+    the CWD. Without the model-proxy creds in the environment ``kbench.llms`` comes up
+    empty. Inject the vars first (``setdefault``, so a real env var still wins).
+    """
+    env = _HERE.parent / ".env"
+    if not env.exists():
+        return
+    for line in env.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        os.environ.setdefault(key.strip(), val.strip())
+
+
+_load_env()
 
 import kaggle_benchmarks as kbench
 
@@ -30,12 +54,20 @@ from auditor.triage import VerdictResult, build_verdict_prompt
 import harness
 
 
-def _models() -> list[str]:
-    env = _HERE.parent / ".env"
-    if env.exists():
-        for line in env.read_text(encoding="utf-8").splitlines():
-            if line.startswith("LLMS_AVAILABLE="):
-                return [m.strip() for m in line.split("=", 1)[1].split(",") if m.strip()]
+def _registry() -> list[tuple[str, object]]:
+    """Snapshot ``kbench.llms`` to ``(name, model)`` pairs, ONCE.
+
+    ``kbench.llms`` is repopulated lazily by a background thread, so reading
+    ``.keys()`` and then re-indexing ``kbench.llms[name]`` in a loop races: a key the
+    snapshot saw can be transiently absent when indexed, surfacing as ``KeyError``.
+    Copying the dict in one shot captures stable name->model pairs and never re-indexes.
+    Retry the copy briefly until it is non-empty so we don't snapshot mid-population.
+    """
+    for _ in range(50):
+        snapshot = list(dict(kbench.llms).items())
+        if snapshot:
+            return snapshot
+        time.sleep(0.1)
     return []
 
 
@@ -76,15 +108,20 @@ def score_verdict(model) -> tuple[int, int, int]:
 
 
 def main() -> None:
-    names = _models()
-    if not names:
-        print("no models found in .env LLMS_AVAILABLE; run `kaggle b init` first")
+    registry = _registry()
+    if not registry:
+        print("no models in kbench.llms; run `kaggle b init` first to refresh .env creds")
         raise SystemExit(1)
     rows = []
-    for name in names:
-        model = kbench.llms[name]
-        lo, ln, le = score_labels(model)
-        vo, vn, ve = score_verdict(model)
+    skipped = []
+    for name, model in registry:
+        try:
+            lo, ln, le = score_labels(model)
+            vo, vn, ve = score_verdict(model)
+        except Exception as exc:  # one inaccessible model must not sink the whole sweep
+            skipped.append((name, type(exc).__name__))
+            print(f"{name:42s} SKIPPED ({type(exc).__name__})", flush=True)
+            continue
         rows.append((name, lo, ln, vo, vn, le + ve))
         tail = f"  (errors {le + ve})" if le + ve else ""
         print(f"{name:42s} labels {lo}/{ln}  verdict {vo}/{vn}{tail}", flush=True)
@@ -93,6 +130,9 @@ def main() -> None:
     print("|---|---|---|---|")
     for name, lo, ln, vo, vn, _ in rows:
         print(f"| {name} | {lo}/{ln} | {vo}/{vn} | {lo + vo}/{ln + vn} |")
+    if skipped:
+        print("\nskipped (inaccessible this run): "
+              + ", ".join(f"{n} [{e}]" for n, e in skipped))
 
 
 if __name__ == "__main__":
