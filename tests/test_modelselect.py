@@ -124,6 +124,13 @@ def test_recommend_declines_on_thin_evidence():
     assert rec.model is None and "need >= 3" in rec.reason
 
 
+def test_recommend_declines_below_accuracy_bar():
+    # Best model at 40% on a binary verdict is no better than guessing: no endorsement.
+    rec = recommend([_score("A", 2, 5), _score("B", 1, 5)])
+    assert rec.model is None
+    assert "reliability bar" in rec.reason and "A" in rec.reason
+
+
 def test_recommend_handles_no_scores():
     assert recommend([ScoreResult(model="A", rows=[])]).model is None
 

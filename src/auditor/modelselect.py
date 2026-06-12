@@ -33,6 +33,9 @@ _ISSUE_KEYS = ("check", "field", "severity", "count", "message", "samples")
 
 # A recommendation needs at least this many cases to be more than a coin toss.
 MIN_CASES = 3
+# Below this pass-rate no model is endorsed: on a binary verdict, a low score is no
+# better than guessing, so naming a "most reliable" model would overstate it.
+MIN_ACCURACY = 0.6
 
 
 @dataclass(frozen=True)
@@ -120,12 +123,18 @@ class Recommendation:
     reason: str
 
 
-def recommend(scores: list[ScoreResult], min_cases: int = MIN_CASES) -> Recommendation:
-    """Pick the most reliable model, or decline when the evidence is too thin.
+def recommend(
+    scores: list[ScoreResult],
+    min_cases: int = MIN_CASES,
+    min_accuracy: float = MIN_ACCURACY,
+) -> Recommendation:
+    """Pick the most reliable model, or decline when the evidence won't support a pick.
 
-    Guards against crowning a model by luck on a tiny domain: with fewer than
-    ``min_cases`` cases the ranking is not trustworthy, so no model is recommended.
-    Ties (equal pass-rate) are reported honestly rather than broken arbitrarily.
+    Declines (``model=None``) in three honest ways rather than overstating:
+    - too few cases to rank (< ``min_cases``): the ranking would be luck;
+    - the best model is below ``min_accuracy``: on a binary verdict that is no better
+      than guessing, so endorsing it would mislead;
+    - otherwise picks the top scorer, reporting a tie rather than breaking it arbitrarily.
     """
     scored = [s for s in scores if s.total]
     if not scored:
@@ -139,8 +148,15 @@ def recommend(scores: list[ScoreResult], min_cases: int = MIN_CASES) -> Recommen
         )
     best = max(s.rate for s in scored)
     leaders = [s for s in scored if s.rate == best]
+    names = ", ".join(s.model for s in leaders)
+    if best < min_accuracy:
+        return Recommendation(
+            None,
+            f"best is {names} at {best:.0%} ({leaders[0].passed}/{total}), below the "
+            f"{min_accuracy:.0%} reliability bar: do not trust this domain's verdict yet. "
+            f"Try a stronger model, or add harder/more cases.",
+        )
     if len(leaders) > 1:
-        names = ", ".join(s.model for s in leaders)
         return Recommendation(
             leaders[0].model,
             f"tie at {best:.0%} ({leaders[0].passed}/{total}) between {names}; pick on "
@@ -165,5 +181,5 @@ def render_scoreboard(domain: str, scores: list[ScoreResult], rec: Recommendatio
         errs = sum(1 for r in s.rows if r.got == "ERROR")
         lines.append(f"| {s.model} | {s.passed}/{s.total} ({s.rate:.0%}) | {errs or ''} |")
     lines.append("")
-    lines.append(f"**Recommended:** {rec.model or 'none'} — {rec.reason}")
+    lines.append(f"**Recommended:** {rec.model or 'none'} - {rec.reason}")
     return "\n".join(lines)
