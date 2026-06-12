@@ -86,14 +86,66 @@ AUDITOR_LLM_MODEL=Qwen/Qwen3-4B python benchmarks/local_run.py --task verdict --
   depending on emphasis (over-calls "defect" or over-calls "expected"), reproducing the
   exact instability the shipped triage docstring records for the 14B. The 4B is **not**
   reliable enough to re-enable the verdict on a flat prompt.
-- **A fix exists, parked (not folded in — tuned on only 5 cases).** A structured
-  *domain-first* decision (quote the governing domain sentence → classify the value's
-  relation `conforms`/`violates`/`none` → map to verdict, with an `uncertain` abstention)
-  plus a grounding top-up (state in the `domain_context` that DFT energies aren't
-  comparable across functionals) took it to 4/5, stable and inspectable. The lone remaining
-  miss is `dup-immutable-id`, whose governing sentence is compound. **Revisit after adding
-  cases and/or the cross-model Kaggle run**, which is what would validate the structure
-  beyond a 5-case sample; only then fold it into `VerdictResult` / `build_verdict_prompt`.
+- **A fix exists, partly landed.** The grounding half is now **done**: the `lemat_bulk`
+  `domain_context` states DFT energies aren't comparable across functionals (the
+  `energy-spread` case the sweep showed 4/5 proxy models miss). Still parked is the
+  *structured domain-first* prompt (quote the governing domain sentence → classify the
+  value's relation `conforms`/`violates`/`none` → map to verdict, with an `uncertain`
+  abstention), which took the 4B to 4/5 stable and inspectable; its lone remaining miss is
+  `dup-immutable-id`, whose governing sentence is compound. **Revisit the structured prompt
+  after adding cases** — that is what would validate it beyond a 5-case sample before
+  folding it into `VerdictResult` / `build_verdict_prompt`.
+
+## Cross-model sweep, run locally (`proxy_sweep.py`)
+
+`proxy_sweep.py` runs both tasks against **every model the Kaggle model proxy exposes**,
+without the server-side import wall. It accesses each model via `kbench.llms[<name>]`,
+which runs the task code (and so `auditor` + `harness`) on *this* machine and sends only
+inference to the proxy. Same cases, same shipped prompts, same grading as the task files
+and `local_run.py` — just swept across the proxy roster read from `.env`'s `LLMS_AVAILABLE`.
+
+```bash
+kaggle b init -y                                       # refresh .env proxy creds (~hourly)
+PYTHONIOENCODING=utf-8 python benchmarks/proxy_sweep.py
+```
+
+### Scoreboard (2026-06-11)
+
+| model | labels | triage-verdict | overall |
+|---|---|---|---|
+| claude-haiku-4.5 | 12/12 | 5/5 | **17/17** |
+| deepseek-v3.2 | 12/12 | 4/5 | 16/17 |
+| gemini-3-flash | 12/12 | 4/5 | 16/17 |
+| gemini-3.1-flash-lite | 12/12 | 4/5 | 16/17 |
+| qwen3-next-80b | 12/12 | 4/5 | 16/17 |
+| glm-5 | 12/12 | 4/5 | 16/17 |
+| gpt-oss-120b | — | — | 12/17 \* |
+
+\* gpt-oss-120b's misses were dominated by **structured-output** failures (4 cases where it
+could not emit the schema cleanly), not judgment errors — a format-compliance signal, not a
+reasoning one.
+
+What it taught us:
+
+- **The withheld verdict is model-limited, not broken.** Claude Haiku 4.5 scores **5/5 on
+  the verdict task using the shipped flat prompt** — no structural change, no grounding
+  top-up. The 4B's seesaw is a capability floor, not a task flaw. This is the concrete
+  evidence the verdict feature *could* be re-enabled, gated on a sufficiently capable model.
+- **`triage-verdict` discriminates; `labels` saturates.** Labels maxes at 12/12 for every
+  capable model (a good regression guard, weak ranking signal). The verdict task is where
+  models actually separate, so that is the set worth growing.
+- **It localized one grounding gap to a single sentence.** The 4/5 models all miss the same
+  case — `energy-spread` — and for a defensible reason: the old `domain_context` said
+  computed properties "should be physically consistent", and they followed it. Only Claude
+  reached outside the prompt to DFT knowledge (energies aren't comparable across
+  functionals). **This is now fixed in the spec**: `lemat_bulk.domain_context` states that
+  pbe/pbesol/scan use different energy references, so an energy spread across rows sharing an
+  `immutable_id` is expected physics. The scoreboard above predates that fix; re-running the
+  sweep should lift the 16/17 models toward 17/17 on grounding alone.
+
+Honest caveat: this is **17 assertions** (12 + 5). The design is drift-proof (it runs the
+shipped builders), but the *rankings* stay advisory until the case set grows — `triage-verdict`
+especially. A strong and a weak model scoring the same is the signal to add cases.
 
 ## Open questions to confirm (per the plan)
 
