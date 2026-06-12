@@ -30,7 +30,7 @@ sys.path.insert(0, str(_HERE.parent / "src"))
 from auditor.checks.labels import LabelVerdict, build_label_prompt
 from auditor.datasets import get
 from auditor.llm import LLMClient, LLMError
-from auditor.triage import VerdictResult, build_verdict_prompt
+from auditor.modelselect import score_model
 
 import harness
 
@@ -63,20 +63,13 @@ def run_labels(client: LLMClient) -> list[tuple]:
 
 
 def run_verdict(client: LLMClient) -> list[tuple]:
+    # Delegate to the in-package scorer so this previewer and `auditor select-model`
+    # share one verdict-scoring path and can never drift.
     meta = harness.load_meta("lemat_bulk")
     spec = get(meta["spec"])
     cases = harness.load_cases(harness.case_dir("lemat_bulk") / "triage_verdict.jsonl")
-    rows = []
-    for case in cases:
-        issue = harness.verdict_case_to_issue(case)
-        body = build_verdict_prompt(issue, spec)
-        try:
-            result = _judge(client, body, spec.domain_context, VerdictResult)
-            rows.append((case["id"], case["expected"], result.verdict,
-                         harness.grade_verdict(result, case), result.reason))
-        except LLMError as exc:
-            rows.append((case["id"], case["expected"], "ERROR", False, str(exc)[:90]))
-    return rows
+    result = score_model(client, cases, spec)
+    return [(r.id, r.expected, r.got, r.ok, r.reason) for r in result.rows]
 
 
 def _report(title: str, rows: list[tuple]) -> tuple[int, int]:

@@ -261,7 +261,8 @@ h1,h2{font-family:var(--font-display);margin:0;letter-spacing:-.02em}
     <div class="appbar-r">
       {% if groups %}<span class="resolved-pill">triaged <span class="resolved-num" id="triaged-count">0</span></span>{% endif %}
       <span class="critical-flag" data-zero="{{ 'true' if stats.error == 0 else 'false' }}"><span class="sev-dot sev-critical"></span>{{ "{:,}".format(stats.error) }} {{ sev_labels['error'] }}</span>
-      {% if groups %}<button class="btn btn-ghost btn-sm" id="export">&#8615; Export</button>{% endif %}
+      {% if groups %}<button class="btn btn-ghost btn-sm" id="export">&#8615; Export CSV</button>{% endif %}
+      {% if groups %}<button class="btn btn-ghost btn-sm" id="export-json">&#8615; Export decisions</button>{% endif %}
     </div>
   </header>
 
@@ -583,6 +584,34 @@ h1,h2{font-family:var(--font-display);margin:0;letter-spacing:-.02em}
     a.href = url; a.download = 'audit-' + DATASET + '.csv';
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
     if(toast){ toast.textContent = 'Downloaded audit-' + DATASET + '.csv'; toast.classList.add('toast--on'); setTimeout(function(){ toast.classList.remove('toast--on'); }, 2200); }
+  });
+
+  // Export the human's keep/dismiss/review decisions as JSON, for `auditor capture`
+  // to turn into labelled benchmark cases. Structured (not CSV) so it round-trips cleanly.
+  var exj = document.getElementById('export-json');
+  if(exj) exj.addEventListener('click', function(){
+    var out = [];
+    issues.forEach(function(i){
+      var rec = state[i.getAttribute('data-fkey')] || {};
+      if(!rec.s) return;  // only rows the reviewer actually decided on
+      out.push({
+        dataset: DATASET,
+        check: i.getAttribute('data-check'),
+        field: i.getAttribute('data-field'),
+        message: i.getAttribute('data-msg'),
+        evidence: i.getAttribute('data-ev'),
+        severity: i.getAttribute('data-sev'),
+        count: Number(i.getAttribute('data-count')) || 0,
+        status: rec.s,
+        note: rec.n || ''
+      });
+    });
+    var blob = new Blob([JSON.stringify(out, null, 2)], {type: 'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = 'decisions-' + DATASET + '.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    if(toast){ toast.textContent = out.length ? ('Exported ' + out.length + ' decision(s)') : 'No decisions yet — keep/dismiss some issues first'; toast.classList.add('toast--on'); setTimeout(function(){ toast.classList.remove('toast--on'); }, 2600); }
   });
 })();
 </script>
