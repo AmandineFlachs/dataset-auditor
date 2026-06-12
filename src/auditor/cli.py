@@ -254,6 +254,46 @@ def select_model(
         typer.echo(md)
 
 
+@app.command()
+def author(
+    dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Dataset to author range rules for."),
+    source: Optional[Path] = typer.Option(None, "--source", "-s", help="Author from this CSV instead."),
+    autonomy: str = typer.Option("balanced", "--autonomy", help="ask-all | balanced | hands-off."),
+    out: Path = typer.Option(Path("authored_rules.py"), "--out", "-o", help="Where to write the spec fragment (a .log.json sits beside it)."),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Local model to use (default: AUDITOR_LLM_MODEL)."),
+) -> None:
+    """Guided rule-authoring: the model proposes range rules, you approve them (slice 1).
+
+    For each numeric column the model proposes a bound, which is dry-run against the real
+    check so you decide on actual flag counts. Under --autonomy ask-all you answer every
+    question (or say 'you choose'); balanced auto-decides the safe ones; hands-off decides
+    all and reports what it did. Needs a local LLM server. Emits a range_rules fragment
+    plus a JSON decision log. Never edits data -- it only proposes checks.
+    """
+    import json
+
+    from auditor.authoring import AUTONOMY, run_session, summarize
+
+    _use_model(model)
+    if autonomy not in AUTONOMY:
+        typer.echo(f"--autonomy must be one of {', '.join(AUTONOMY)}")
+        raise typer.Exit(code=2)
+
+    spec = get(dataset)
+    df = load(source, spec=spec)
+    result = run_session(df, spec, autonomy)
+    if not result.log:
+        typer.echo("local LLM not reachable, or no candidates proposed - nothing to author "
+                   "(start the vLLM server, e.g. AUDITOR_LLM_MODEL=...).")
+        raise typer.Exit(code=1)
+
+    out.write_text(result.fragment, encoding="utf-8")
+    log_path = out.with_suffix(".log.json")
+    log_path.write_text(json.dumps(result.log, indent=2), encoding="utf-8")
+    typer.echo(summarize(result))
+    typer.echo(f"wrote {out} (+ decision log {log_path.name})")
+
+
 @app.command(name="profile")
 def show_profile(
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Dataset to profile."),
