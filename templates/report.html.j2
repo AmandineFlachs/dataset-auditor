@@ -350,7 +350,7 @@ h1,h2{font-family:var(--font-display);margin:0;letter-spacing:-.02em}
                 <button type="button" class="issue-head">
                   <span class="issue-rail"></span>
                   <span class="sev-dot sev-{{ sc }}"></span>
-                  <span class="issue-row-no mono">{% if r.count == 1 %}{{ r.sample_ids[0] if r.sample_ids else "&mdash;" }}{% else %}&times;{{ "{:,}".format(r.count) }}{% endif %}</span>
+                  <span class="issue-row-no mono">{% if r.count == 1 %}{% if r.sample_ids %}{{ r.sample_ids[0] }}{% else %}&mdash;{% endif %}{% else %}&times;{{ "{:,}".format(r.count) }}{% endif %}</span>
                   <span class="issue-title">{{ r.message }}{% if r.field %}<span class="field-chip mono">{{ r.field }}</span>{% endif %}</span>
                   <span class="issue-meta">
                     <span class="status-tag" data-status style="display:none"></span>
