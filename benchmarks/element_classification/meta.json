@@ -1,0 +1,22 @@
+{
+  "task": "element-classification",
+  "description": "Given an element and a claimed metal/nonmetal/metalloid classification, judge plausible/implausible. A vocabulary check passes any value in {metal, nonmetal, metalloid}; only world knowledge catches a planted defect (oxygen labelled 'metal'). Second domain alongside labels_plausibility, to test generalization, not just phase recall. Reuses the shipped build_label_prompt + LabelVerdict; passes NO answer-bearing context.",
+  "column": "classification",
+  "allowed": ["metal", "nonmetal", "metalloid"],
+  "expected_values": ["plausible", "implausible"],
+  "context_fields": ["element", "symbol", "atomic_number", "period"],
+  "positive_class": "implausible",
+  "class_weights": {"plausible": 1.0, "implausible": 1.0},
+  "leakage_policy": {
+    "no_domain_context": true,
+    "forbid_terms": ["metal", "nonmetal", "non-metal", "metalloid", "semimetal", "semi-metal"]
+  },
+  "scorer_version": "1.0.0",
+  "frozen_prompt": {
+    "builder": "auditor.checks.labels.build_label_prompt",
+    "schema": "LabelVerdict",
+    "hash": "sha256:d7e4a5d1556c88faa0554fe53e9fe7beae82f5ccce375771f9c091540f883672",
+    "frozen_at": "2026-06-13"
+  },
+  "splits": {"dev": 24, "calibration": 30, "test": 40}
+}

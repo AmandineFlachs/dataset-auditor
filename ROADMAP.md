@@ -138,22 +138,49 @@ deterministic-vs-LLM README section, a CHANGELOG, README screenshots of the repo
 an MIT `LICENSE`, and the repo under version control (`git init`, initial `v0.1.0`
 commit). The one remaining step is the public GitHub push + `v0.1.0` tag.
 
-### v2 — benchmark layer + self-improving loop (built, then removed)
+### v2 — leakage-safe evaluation + readiness rubric (on the `v2` branch)
 
-A Kaggle-benchmark layer (to score the model-judgment parts) and a self-improving loop
-(`capture` → `select-model`, turning report decisions into model-selection cases) were
-built on the `v2-kaggle-benchmarks` branch, then **deliberately removed**. Two honest
-reasons: (1) the `triage-verdict` benchmark **leaked** — the domain-context grounding it
-fed the model effectively stated the answers, so it measured "can the model read a
-sentence," not domain reasoning; and (2) the conclusions and the self-improving loop were
-**unproven** — tiny case counts (N≈5–17) and no experiment showing the loop actually
-improves model selection. Rather than ship a measurement we couldn't defend, the project
-was cut back to its sound core. The history remains on the branch if any of it is revived
-later (against larger, leakage-controlled case sets).
+A first v2 attempt (a Kaggle-benchmark layer + a `capture`/`select-model` self-improving
+loop) was **removed**: the `triage-verdict` benchmark *leaked* (its domain-context grounding
+stated the answers, measuring reading not reasoning), and the loop was *unproven* (tiny
+N≈5–17, no experiment). Rather than ship a number we couldn't defend, it was cut and the
+eval layer rebuilt **scientifically**. `main` stays v1; this work lives on branch `v2`.
+
+What v2 adds:
+
+1. **Evaluation protocol first** — `EVAL_PROTOCOL.md` (scope tiers, leakage/contamination
+   definitions, dev/calibration/hidden splits, prompt- and scoring-freeze, held-out-only
+   reporting with confidence intervals + baselines), plus `docs/methodology.md` and
+   `docs/leakage_checklist.md`.
+2. **Leakage-safe benchmark, local-only (no Kaggle SDK).** A pure model-free harness
+   (`benchmarks/shared/`) + two tasks that reuse the shipped `build_label_prompt` /
+   `LabelVerdict` but pass **no** answer-bearing context: `labels_plausibility`
+   (phase-at-STP) and `element_classification` (metal/nonmetal/metalloid). Three disjoint
+   splits each, balanced classes, an automated leakage linter, a frozen-prompt hash, and a
+   value↔label decorrelation guard — all enforced in CI.
+3. **Reasoning mode.** The strict (forced-JSON) path made the small Qwen3-4B confabulate
+   and score at the floor (0.500 held-out, 0/20 defects). Letting it *think* first
+   (opt-in `reasoning` in `auditor.llm`, default-on for the `labels` check) took it to
+   **1.000 held-out on both domains** (40/40 each), beating the vocabulary/majority floors.
+4. **Readiness rubric** — `auditor rubric` + a report panel: per-dimension scores
+   (completeness/consistency/plausibility/duplication/privacy) + overall, a deterministic
+   roll-up of the findings; LLM-judged labels stay advisory and never move a score.
+
+Status: built and **held-out-verified on Qwen3-4B** (219 tests pass). Not merged to `main`.
 
 ## Deferred — what's next
 
 Parked on purpose: this is scoping without creep, and each item notes *why* it waits.
+
+- **Grow the benchmark case set + test more models** (the v2 next step). Each held-out set
+  is N=40 (CI ~±9pp at 100%); more cases tighten it, and running several models turns the
+  result into a real model comparison. Highest-value, lowest-risk next move.
+- **Publish to Kaggle Community Benchmarks** — *after* the case set is grown and multi-model,
+  as a distribution step. Needs the server-side import wall solved and the leakage discipline
+  carried over; deferred because publishing a thin benchmark publicly is the opposite of
+  "only ship what you can defend."
+- **The self-improving loop stays out** unless revived with an actual experiment showing it
+  improves model selection (its history is on `v2-kaggle-benchmarks`).
 
 - **Config-file rules.** Plausibility rules now live per-dataset in
   `datasets.py` (in-code `DatasetSpec.range_rules`), not scattered through the

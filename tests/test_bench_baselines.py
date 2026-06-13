@@ -1,7 +1,6 @@
 """Baseline tests. Model-free."""
 
-from labels_plausibility import baselines
-from shared import metrics
+from shared import baselines, metrics
 
 META = {"allowed": ["solid", "liquid", "gas"]}
 
