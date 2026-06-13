@@ -60,6 +60,24 @@ the point. The model is only interesting if it clearly beats both baselines on h
 data. To narrow the interval, grow the `test` split (more curated cases), never by tuning
 on it.
 
+## Results
+
+Held-out (`test`) results, reported per EVAL_PROTOCOL.md §6 (one-shot, with a 95% CI and
+both baselines). Provenance: frozen prompt `sha256:03bab39d…`, scorer `1.0.0`, 2026-06-13.
+
+| Model | Inference path | Held-out accuracy (N=40) | 95% CI | Caught planted defects | Baselines |
+| --- | --- | --- | --- | --- | --- |
+| Qwen/Qwen3-4B | strict (forced JSON) | 0.500 | [0.352, 0.648] | 0 / 20 | vocab 0.500 · majority 0.500 |
+| Qwen/Qwen3-4B | **reasoning** | **1.000** | [0.912, 1.000] | **20 / 20** | vocab 0.500 · majority 0.500 |
+
+Same model, same frozen prompt, same held-out cases — the only change is letting the
+reasoning model think before answering (`--reasoning`; see "reasoning mode" in
+`src/auditor/llm.py`). The strict path forces `response_format=json_object`, which
+suppresses the model's `<think>` step and makes it confabulate ("Helium is solid at STP");
+reasoning mode drops that constraint and extracts the final JSON. This is why the shipped
+`labels` check defaults to reasoning. The fix was driven by a diagnostic and the `dev`
+split, never by inspecting `test`, so each row is a single honest held-out measurement.
+
 ## Before adding cases or a new task
 
 Work through [`../docs/leakage_checklist.md`](../docs/leakage_checklist.md). The `[auto]`

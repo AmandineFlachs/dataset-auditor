@@ -48,7 +48,11 @@ def check(df: pd.DataFrame, rules=(), client: LLMClient | None = None, context: 
     """Judge each rule's categorical column, degrading to one info finding if offline."""
     if not rules:
         return []  # configured off: silence, no skip notice, no calls
-    client = client or LLMClient.from_env()
+    # This check defaults to REASONING mode. On the strict (forced-JSON) path a small
+    # reasoning model confabulates and scores at the floor on the leakage-safe benchmark
+    # (0.500); letting it think first takes it to 1.000 on held-out data (40/40). See
+    # benchmarks/README.md "Results". A caller can inject a strict client to override.
+    client = client or LLMClient.from_env(reasoning=True)
     # Decide reachability ONCE, up front (cheap GET /models, never raises).
     if not client.available():
         return [_skipped_finding()]

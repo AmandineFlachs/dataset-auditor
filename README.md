@@ -326,6 +326,14 @@ is **Qwen3.6-27B**, served by vLLM on a 24 GB GPU. Point the client elsewhere wi
 [Deterministic vs. the LLM](#deterministic-vs-the-llm) for exactly where the model is and
 isn't in the loop.
 
+**Reasoning models.** Reasoning models (e.g. Qwen3) need to *think* before answering. The
+default strict path forces JSON-only output, which suppresses that thinking and makes a
+small model confabulate — on the label benchmark it scored at the floor (0.500) until
+reasoning was enabled, which took it to **1.000** on held-out data ([`benchmarks/`](benchmarks/)).
+So the `labels` check **defaults to reasoning mode**; for the other LLM helpers you can opt
+in with `AUDITOR_LLM_REASONING=1` (slower, but it lets the model think). If a single call is
+very slow, lower vLLM's `--gpu-memory-utilization` so GPU memory doesn't page to system RAM.
+
 ## Development
 
 ```powershell
