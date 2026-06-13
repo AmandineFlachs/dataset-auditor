@@ -71,9 +71,17 @@ self-contained (system fonts, no external resources). Other commands:
 auditor datasets                          # list available datasets
 auditor run -d meteorites -s my.csv       # audit any CSV with a chosen spec
 auditor profile -d meteorites             # exploratory profile (no findings)
+auditor rubric -d meteorites              # dataset-readiness scores per dimension
 auditor brief -d lemat_bulk -o brief.md   # local-LLM domain briefing (needs a server)
 auditor triage -d lemat_bulk              # prioritize findings; LLM adds notes (needs a server)
 ```
+
+`auditor rubric` rolls the deterministic findings up into a **dataset-readiness** score
+per dimension (completeness, consistency, plausibility, duplication, privacy) plus an
+overall number — a first step toward "is this dataset fit for use?", not just "what's
+wrong?". It is a deterministic aggregation of facts: LLM-judged labels are advisory only
+and never move a score, and a dimension whose checks didn't run shows `n/a` rather than a
+misleading 100. The same panel appears at the top of the HTML report.
 
 `auditor triage` collapses the findings into distinct issues and orders them by a
 **deterministic** priority (severity, then affected rows); a local LLM adds a plain
@@ -330,6 +338,15 @@ uv run pytest
 Optional dependencies are grouped by phase in `pyproject.toml` (`load`, `checks`,
 `llm`, `report`, `cli`, `dev`) so the data contract and its tests install without
 pulling in pandas, httpx, jinja2, or torch. Install only what you need.
+
+## Evaluation
+
+The deterministic checks are facts (covered by `pytest`); the only fallible part is the
+advisory LLM's judgement. That is measured under a **leakage-safe** protocol — see
+[`EVAL_PROTOCOL.md`](EVAL_PROTOCOL.md) (the rules), [`docs/methodology.md`](docs/methodology.md)
+(the reasoning), and [`benchmarks/`](benchmarks/) (the one task today, `label-plausibility`,
+with disjoint dev/calibration/hidden splits, a frozen prompt, an automated leakage linter,
+and held-out-only reporting). The harness is pure and model-free, so CI needs no model.
 
 ## License
 

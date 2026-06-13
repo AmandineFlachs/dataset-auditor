@@ -44,6 +44,7 @@ from auditor.glossary import (
     severity_label,
 )
 from auditor.models import Finding, Severity
+from auditor import rubric as rubric
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = REPO_ROOT / "templates"
@@ -80,6 +81,7 @@ def render(
     groups = _grouped(findings, cap, indexed)
     overview = _overview(df, spec) if df is not None else None
     n_cols = overview["n_cols"] if overview else None
+    readiness = rubric.score(findings, n_rows, not_assessed=rubric.unassessed_dimensions(spec))
     return _env().get_template(TEMPLATE_NAME).render(
         dataset=spec.name,
         file_name=spec.filename,
@@ -97,6 +99,7 @@ def render(
         cap=cap,
         field_summary=_field_summary(findings),
         overview=overview,
+        readiness=readiness,
     )
 
 

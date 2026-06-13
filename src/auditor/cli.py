@@ -183,6 +183,53 @@ def triage(
         typer.echo(md)
 
 
+@app.command(name="rubric")
+def rubric_cmd(
+    dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Dataset to score."),
+    source: Optional[Path] = typer.Option(None, "--source", "-s", help="Score this CSV instead."),
+    rules: Optional[Path] = typer.Option(None, "--rules", help="Apply an authored rule fragment to the spec."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the rubric as JSON instead of a table."),
+) -> None:
+    """Score dataset readiness: per-dimension clean rates from the deterministic findings.
+
+    Aggregates the deterministic checks into completeness / consistency / plausibility /
+    duplication / privacy, plus an overall readiness. This is a deterministic roll-up of
+    facts: LLM-judged labels are advisory only and never move a score. A dimension whose
+    checks did not run for this dataset shows 'n/a', never a misleading 100.
+    """
+    import json
+
+    from auditor import rubric as rubric_mod
+
+    spec = _spec_with_rules(dataset, rules)
+    df = load(source, spec=spec)
+    findings = run_all(df, spec)
+    r = rubric_mod.score(findings, len(df), not_assessed=rubric_mod.unassessed_dimensions(spec))
+
+    if json_out:
+        typer.echo(json.dumps(r.as_dict(), indent=2))
+        return
+
+    head = f"{r.readiness:.0f}/100" if r.readiness is not None else "n/a"
+    typer.echo(f"readiness: {head}   ({spec.name}, {r.n_rows:,} rows)")
+    for d in r.dimensions:
+        if not d.assessed:
+            typer.echo(f"  {d.name:<13} n/a   (not assessed for this dataset)")
+        else:
+            if d.affected_rows:
+                tail = f"{d.affected_rows:,} rows affected"
+            elif d.n_findings:
+                tail = f"{d.n_findings} dataset-level issue(s)"
+            else:
+                tail = "clean"
+            typer.echo(f"  {d.name:<13} {d.score:5.1f}   ({tail})")
+        if d.advisory:
+            typer.echo(
+                f"  {'':13}       advisory: {d.advisory['labels_flagged_rows']} rows "
+                f"LLM-flagged (not scored)"
+            )
+
+
 @app.command()
 def author(
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Dataset to author range rules for."),
