@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import TypeVar
 
 import httpx
@@ -42,6 +43,11 @@ from pydantic import BaseModel, ValidationError
 DEFAULT_BASE_URL = "http://localhost:8000/v1"
 DEFAULT_MODEL = "local-model"
 DEFAULT_TIMEOUT = 30.0
+# Reasoning models (e.g. Qwen3) emit a long <think> step before answering, which is
+# both slower and incompatible with JSON-grammar-constrained decoding. When reasoning is
+# enabled we give the request much more time and a token budget for the thinking.
+DEFAULT_REASONING_TIMEOUT = 300.0
+DEFAULT_REASONING_MAX_TOKENS = 2048
 # A per-run guard so a buggy check can't fire thousands of calls at the server.
 # Checks are expected to *sample* rows; this is the backstop, not the budget.
 DEFAULT_MAX_CALLS = 200
@@ -98,11 +104,19 @@ class LLMClient:
         api_key: str = "EMPTY",  # vLLM ignores it; OpenAI-compat clients still send one
         timeout: float = DEFAULT_TIMEOUT,
         max_calls: int = DEFAULT_MAX_CALLS,
+        reasoning: bool = False,
+        max_tokens: int | None = None,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         self.model = model
         self.max_calls = max_calls
+        self.reasoning = reasoning
+        self.max_tokens = max_tokens
         self._calls = 0
+        # A reasoning model needs far longer to think; bump the default timeout when it
+        # is on, but never override a timeout the caller set explicitly.
+        if reasoning and timeout == DEFAULT_TIMEOUT:
+            timeout = DEFAULT_REASONING_TIMEOUT
         # httpx merges a relative request path onto base_url only when base_url ends
         # with "/" and the path does NOT start with "/". Normalize once here so the
         # "/v1" prefix is preserved (a leading-slash path would wipe it).
@@ -171,7 +185,7 @@ class LLMClient:
         for _ in range(retries + 1):
             content = self._chat(messages)
             try:
-                return schema.model_validate_json(_strip_code_fences(content))
+                return schema.model_validate_json(_extract_json(content))
             except ValidationError as exc:
                 last_error = exc
         raise LLMResponseError(
@@ -189,14 +203,24 @@ class LLMClient:
                 f"sample rather than scan every row"
             )
         self._calls += 1
-        payload = {
+        payload: dict = {
             "model": self.model,
             "messages": messages,
             "temperature": 0.0,  # auditing wants determinism, not creativity
+        }
+        if self.reasoning:
+            # Let the model think first: do NOT constrain the output to a JSON grammar
+            # (that suppresses the <think> step and makes a small reasoning model
+            # confabulate a confident wrong answer). Give it a token budget to finish,
+            # then _extract_json pulls the final object out of the reply. Slower, but
+            # far more accurate for reasoning models.
+            payload["max_tokens"] = self.max_tokens or DEFAULT_REASONING_MAX_TOKENS
+        else:
             # Bias the server toward emitting a bare JSON object. vLLM honours this;
             # we still validate, so it is a hint, not a guarantee.
-            "response_format": {"type": "json_object"},
-        }
+            payload["response_format"] = {"type": "json_object"}
+            if self.max_tokens is not None:
+                payload["max_tokens"] = self.max_tokens
         try:
             resp = self._http.post("chat/completions", json=payload)
             resp.raise_for_status()
@@ -229,6 +253,8 @@ class LLMClient:
             env["model"] = model
         if key := os.getenv("AUDITOR_LLM_KEY"):
             env["api_key"] = key
+        if os.getenv("AUDITOR_LLM_REASONING", "").strip().lower() in {"1", "true", "yes", "on"}:
+            env["reasoning"] = True
         env.update(overrides)
         return cls(**env)  # type: ignore[arg-type]
 
@@ -268,6 +294,50 @@ def _strip_code_fences(text: str) -> str:
     if s.endswith("```"):
         s = s[:-3]
     return s.strip()
+
+
+_THINK_RE = re.compile(r"<think\b[^>]*>.*?</think>", re.IGNORECASE | re.DOTALL)
+
+
+def _strip_think(text: str) -> str:
+    """Drop a reasoning model's ``<think>...</think>`` block, keeping the answer after it.
+
+    In reasoning mode the model thinks out loud before emitting JSON. If the server has a
+    reasoning parser the think text is already separated; if not, it is inline here.
+    """
+    return _THINK_RE.sub("", text)
+
+
+def _last_json_object(text: str) -> str | None:
+    """Return the last substring of ``text`` that decodes as a complete JSON object.
+
+    After thinking, the answer object sits at the end of the reply (possibly after prose).
+    Trying ``raw_decode`` from each ``{`` and keeping the last full parse finds it without
+    fragile regex brace-matching.
+    """
+    decoder = json.JSONDecoder()
+    best: str | None = None
+    for i, ch in enumerate(text):
+        if ch == "{":
+            try:
+                _, end = decoder.raw_decode(text[i:])
+            except json.JSONDecodeError:
+                continue
+            best = text[i : i + end]
+    return best
+
+
+def _extract_json(text: str) -> str:
+    """Pull the JSON object out of a reply: strip a think block and fences, then take the
+    last complete object. Handles both the strict (already-JSON) and reasoning paths; if
+    nothing parses, returns the cleaned text so validation raises a meaningful error."""
+    s = _strip_code_fences(_strip_think(text)).strip()
+    try:
+        json.loads(s)
+        return s
+    except json.JSONDecodeError:
+        obj = _last_json_object(s)
+        return obj if obj is not None else s
 
 
 if __name__ == "__main__":

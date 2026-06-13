@@ -60,7 +60,9 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="label-plausibility benchmark runner")
     ap.add_argument("--split", default="dev", choices=cases.SPLITS)
     ap.add_argument("--model", default=None, help="LLM id (default: AUDITOR_LLM_MODEL)")
-    ap.add_argument("--timeout", type=float, default=60.0)
+    ap.add_argument("--timeout", type=float, default=180.0)
+    ap.add_argument("--reasoning", action="store_true",
+                    help="let a reasoning model think before answering (slower, more accurate)")
     ap.add_argument("--mock", action="store_true", help="use a model-free stub (CI smoke)")
     ap.add_argument("--confirm-final", action="store_true", help="required to run the held-out test split")
     ap.add_argument("--run-at", default="unspecified", help="timestamp string for the manifest")
@@ -85,7 +87,11 @@ def main(argv: list[str] | None = None) -> int:
         print("LEAKAGE detected — aborting:\n" + rep.summary())
         return 2
 
-    client = _mock_client() if args.mock else LLMClient.from_env(model=args.model, timeout=args.timeout)
+    client = (
+        _mock_client()
+        if args.mock
+        else LLMClient.from_env(model=args.model, timeout=args.timeout, reasoning=args.reasoning)
+    )
     model_id = "mock" if args.mock else (args.model or client.model)
     if not args.mock and not client.available():
         print(f"local LLM not reachable (model={model_id}); start the vLLM server first")
