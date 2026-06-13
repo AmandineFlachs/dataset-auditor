@@ -101,11 +101,9 @@ def _apply(df: pd.DataFrame, rule, client: LLMClient, context: str) -> list[Find
 def build_label_prompt(rule, row: pd.Series, ctx_cols: list[str]) -> str:
     """Build the categorical-plausibility prompt for one (value, context) case.
 
-    Public because the Kaggle benchmark (``benchmarks/labels_plausibility.py``) calls
-    it to evaluate models against the *exact* prompt the check ships, so the benchmark
-    can never drift from production. The domain context is injected separately by
-    ``llm.py`` (via the ``context=`` arg to ``judge``), so it is not part of this
-    string; a caller outside the check (the benchmark) must prepend it itself.
+    Kept as a small, separately-testable function so the prompt the check ships can be
+    exercised directly. The domain context is injected separately by ``llm.py`` (via the
+    ``context=`` arg to ``judge``), so it is not part of this string.
     """
     value = row[rule.column]
     lines = [f"Column {rule.column!r} has value {value!r} for this row."]

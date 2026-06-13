@@ -36,8 +36,7 @@ def _use_model(model: Optional[str]) -> None:
 
     ``AUDITOR_LLM_MODEL`` is the single carrier of "the chosen model" across every stage
     (``LLMClient.from_env`` reads it), so a ``--model`` flag just sets it here, leaving
-    each command's own timeout intact. The model a user lands on via ``select-model``
-    flows into ``brief``/``triage`` this way.
+    each command's own timeout intact. ``brief``/``triage``/``author`` all read it.
     """
     if model:
         os.environ["AUDITOR_LLM_MODEL"] = model
@@ -86,10 +85,7 @@ def run(
     typer.echo(f"audited {len(df):,} rows of {spec.name!r}: {len(findings):,} findings ({breakdown})")
     typer.echo(f"wrote {path}")
     if findings:
-        typer.echo(
-            f"next: review {path.name}, keep/dismiss issues, click 'Export decisions', "
-            f"then `auditor capture <file> -d {spec.name}`"
-        )
+        typer.echo(f"next: open {path.name} and review the issues (keep / dismiss / needs-review)")
     if open_report:
         webbrowser.open(path.resolve().as_uri())
 
@@ -183,94 +179,6 @@ def triage(
     if out is not None:
         out.write_text(md, encoding="utf-8")
         typer.echo(f"wrote triage of {len(groups)} issues -> {out}")
-    else:
-        typer.echo(md)
-
-
-@app.command()
-def capture(
-    export: Path = typer.Argument(..., help="decisions-*.json exported from the report."),
-    dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Domain (default: inferred from the export)."),
-    source: Optional[Path] = typer.Option(None, "--source", "-s", help="Re-audit this CSV (must match the report's data)."),
-    out: Optional[Path] = typer.Option(None, "--out", "-o", help="Cases file (default: benchmarks/cases/<dataset>/triage_verdict.jsonl)."),
-    append: bool = typer.Option(True, "--append/--overwrite", help="Merge with existing cases (default) or replace them."),
-) -> None:
-    """Turn the report's keep/dismiss decisions into labelled benchmark cases.
-
-    keep -> real_defect, dismiss -> expected_artifact. Re-runs the audit to get the
-    canonical issue shape (counts, samples) and attaches the human's verdict, writing the
-    same JSONL the benchmark grades. Feeds `auditor select-model`.
-    """
-    from auditor.capture import load_export, to_cases, write_cases
-    from auditor.triage import issue_groups
-
-    decisions = load_export(export)
-    if dataset is None and decisions:
-        dataset = decisions[0].get("dataset")
-    spec = get(dataset)
-
-    df = load(source, spec=spec)
-    groups = issue_groups(run_all(df, spec))
-    cases, summary = to_cases(groups, decisions)
-    if not cases:
-        typer.echo(
-            f"no labelled cases produced ({summary['undecided']} issue(s) undecided, "
-            f"{summary['conflict']} conflicted). Keep/dismiss some issues, then export again."
-        )
-        raise typer.Exit(code=1)
-
-    out_path = out or Path("benchmarks/cases") / spec.name / "triage_verdict.jsonl"
-    total = write_cases(cases, out_path, append=append)
-    note = f", {summary['conflict']} conflicted" if summary["conflict"] else ""
-    typer.echo(
-        f"captured {summary['labeled']} case(s) for {spec.name!r}{note} -> {out_path} "
-        f"({total} total). Now: auditor select-model -d {spec.name} -m <model>"
-    )
-
-
-@app.command(name="select-model")
-def select_model(
-    dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Domain whose captured cases to benchmark."),
-    cases: Optional[Path] = typer.Option(None, "--cases", help="Cases file (default: benchmarks/cases/<dataset>/triage_verdict.jsonl)."),
-    model: list[str] = typer.Option([], "--model", "-m", help="Local model id to score (repeatable). Default: AUDITOR_LLM_MODEL."),
-    timeout: float = typer.Option(120.0, "--timeout", help="Per-call timeout (s); reasoning models need headroom."),
-    out: Optional[Path] = typer.Option(None, "--out", "-o", help="Write the scoreboard Markdown here (else print)."),
-) -> None:
-    """Score local models on a domain's verdict cases and recommend the most reliable.
-
-    Turns the benchmark into a user-facing answer to "which local model should I trust
-    for this dataset's hard, model-judged calls?" Reuses the captured/labelled cases as
-    ground truth. Needs a local LLM server; with none reachable it says so and stops.
-    """
-    from auditor.llm import LLMClient
-    from auditor.modelselect import load_cases, recommend, render_scoreboard, score_model
-
-    spec = get(dataset)
-    cases_path = cases or Path("benchmarks/cases") / spec.name / "triage_verdict.jsonl"
-    if not cases_path.exists():
-        typer.echo(f"no cases for {spec.name!r} at {cases_path} - run an audit and `auditor capture` first.")
-        raise typer.Exit(code=1)
-    loaded = load_cases(cases_path)
-    if not loaded:
-        typer.echo(f"{cases_path} has no cases yet.")
-        raise typer.Exit(code=1)
-
-    # Default to the env/configured model when no -m is given.
-    models = model or [LLMClient.from_env().model]
-    scores = []
-    for name in models:
-        client = LLMClient.from_env(model=name, timeout=timeout)
-        if not client.available():
-            typer.echo(f"local LLM not reachable (model={name}); start the vLLM server first")
-            raise typer.Exit(code=1)
-        typer.echo(f"scoring {name} on {len(loaded)} {spec.name} case(s)...")
-        scores.append(score_model(client, loaded, spec))
-        client.close()
-
-    md = render_scoreboard(spec.name, scores, recommend(scores))
-    if out is not None:
-        out.write_text(md + "\n", encoding="utf-8")
-        typer.echo(f"wrote scoreboard -> {out}")
     else:
         typer.echo(md)
 

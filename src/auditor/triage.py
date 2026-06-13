@@ -4,14 +4,13 @@ A real audit produces many findings (LeMat-Bulk: 363) of unequal importance. Tri
 turns that flat list into a prioritized reading order plus a short orientation for a
 human reviewer.
 
-Scope is deliberate, and it was set by experiment. An earlier version asked the local
-model to judge whether each issue was a *genuine defect or an expected artifact* (e.g.
-the 122 duplicate ids that are really one material across DFT functionals). A 14B model
-could not do that reliably -- it anchored on the generic check message ("this column is
-expected to be unique") and an `error` severity, and four prompt variants (including a
-few-shot worked example) did not fix it. Asking a model for a verdict it gets wrong is
-worse than not asking, so that verdict was removed. What remains is split by who is
-good at what:
+Scope is deliberate. The local model is NOT asked to judge whether each issue is a
+*genuine defect or an expected artifact* (e.g. the 122 duplicate ids that are really one
+material across DFT functionals). That verdict needs domain grounding to get right: a
+model that anchors on the generic check message ("this column is expected to be unique")
+and an `error` severity will call an expected artifact a defect. Shipping a verdict that
+is wrong is worse than not shipping one, so it is withheld. What remains is split by who
+is good at what:
 
 * **Deterministic** (no model, never wrong): cluster findings into distinct issue
   types, and order them by severity then affected-row count. This is the priority.
@@ -25,8 +24,6 @@ surfaces as `LLMTimeout`), and it never edits a finding.
 """
 
 from __future__ import annotations
-
-from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -62,28 +59,6 @@ class TriageNotes(BaseModel):
 
     summary: str
     notes: list[IssueNote] = Field(default_factory=list)
-
-
-class VerdictResult(BaseModel):
-    """A model's real-defect-vs-expected-artifact judgement on ONE issue.
-
-    This is the verdict the shipped triage deliberately does NOT ask for (see the
-    module docstring): a 14B could not do it reliably, so it was removed rather than
-    ship a judgement that is wrong. The schema and :func:`build_verdict_prompt` exist
-    only for the Kaggle benchmark (``benchmarks/triage_verdict.py``), which measures
-    whether a *better* model can do it -- a passing model is the evidence to
-    reintroduce the verdict to the product. It is not wired into :func:`triage`.
-    """
-
-    verdict: Literal["real_defect", "expected_artifact"]
-    """Whether the flagged issue is a genuine data error or a pattern the domain
-    explains as intentional/normal."""
-
-    confidence: float = Field(ge=0.0, le=1.0)
-    """The model's self-rated confidence in the verdict."""
-
-    reason: str
-    """One sentence grounding the verdict in the domain context."""
 
 
 def triage(findings: list[Finding], spec: DatasetSpec, *, client: LLMClient | None = None) -> TriageNotes | None:
@@ -169,49 +144,6 @@ def _prompt(groups: list[dict], spec: DatasetSpec) -> str:
             lines.append(f"    e.g. {s}")
     lines.append("")
     lines.append("Return a 'summary' and a 'notes' list with one entry per issue above (use its [id]).")
-    return "\n".join(lines)
-
-
-def build_verdict_prompt(issue: dict, spec: DatasetSpec) -> str:
-    """Build the real-vs-expected verdict prompt for ONE issue (benchmark only).
-
-    ``issue`` is one group dict from :func:`issue_groups`. This is the judgement the
-    shipped triage withholds; the prompt is written to counter the exact failure that
-    got it removed -- a small model anchored on the generic check message ("expected
-    to be unique") and an ``error`` severity to call an *expected* artifact a defect.
-    So it explicitly tells the model NOT to treat "a check flagged it" or a high
-    severity as evidence of a real defect, and to lean on the domain context instead.
-
-    Like :func:`build_label_prompt`, the domain context is injected separately by
-    ``llm.py`` (``context=``), so the benchmark caller prepends ``spec.domain_context``.
-    """
-    field = issue.get("field") or "(whole dataset)"
-    lines = [
-        "An automated data-quality audit flagged the issue below on this dataset. Judge "
-        "whether it is a GENUINE DEFECT (a real error in the data) or an EXPECTED "
-        "ARTIFACT (a pattern the dataset's domain explains as intentional or normal).",
-        "",
-        "Decide from the DOMAIN CONTEXT, not from the audit's framing. The automated "
-        "checks are deliberately broad: a flagged issue, a high severity, or a message "
-        "like 'expected to be unique' is NOT evidence that the data is wrong -- some of "
-        "what the checks surface is expected behaviour the domain accounts for. Equally, "
-        "do not wave away a real error. Weigh what the field means in this dataset.",
-        "",
-        f"Dataset: {spec.name}",
-        "Issue:",
-        f"  check: {issue['check']}",
-        f"  field: {field}",
-        f"  severity: {issue['severity']}",
-        f"  affected rows: {issue['count']}",
-        f"  message: {issue['message']}",
-    ]
-    for s in issue.get("samples", []):
-        lines.append(f"  e.g. {s}")
-    lines.append("")
-    lines.append(
-        "Answer verdict='real_defect' or 'expected_artifact', a confidence in [0,1], and "
-        "a one-sentence reason grounded in the domain context."
-    )
     return "\n".join(lines)
 
 

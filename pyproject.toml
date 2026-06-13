@@ -22,9 +22,6 @@ checks = ["sentence-transformers>=2.7", "presidio-analyzer>=2.2", "spacy>=3.7"]
 llm = ["httpx>=0.27"]            # talk to vLLM's OpenAI-compatible /v1 endpoint
 report = ["jinja2>=3.1"]
 cli = ["typer>=0.12"]
-# Kaggle Community Benchmarks: evaluate the LLM judgment layer (benchmarks/). A dev/eval
-# asset, not part of the shipped auditor, so it stays optional and out of the wheel.
-bench = ["kaggle-benchmarks>=0.6", "kaggle>=1.6"]
 dev = ["pytest>=8.0"]
 
 [project.scripts]
@@ -43,7 +40,5 @@ build-backend = "hatchling.build"
 packages = ["src/auditor"]
 
 [tool.pytest.ini_options]
-# "benchmarks" is on the path so tests can import the model-free benchmark harness; the
-# kbench task files themselves are never collected (testpaths is tests/ only).
-pythonpath = ["src", "benchmarks"]
+pythonpath = ["src"]
 testpaths = ["tests"]

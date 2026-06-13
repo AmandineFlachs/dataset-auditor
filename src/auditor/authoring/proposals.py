@@ -153,8 +153,7 @@ def _numeric_columns(df: pd.DataFrame) -> list[str]:
 def build_prompt(df: pd.DataFrame, spec: DatasetSpec) -> str:
     """The propose prompt: metadata + the closed grammar + a conservative instruction.
 
-    Public so the (future) authoring benchmark can measure proposal quality on the exact
-    prompt that ships, as the verdict/label benchmarks reuse their builders.
+    Kept as a separate public function so the exact prompt that ships can be tested directly.
     """
     cols = [c for c in df.columns if c != "row_id"]
     numeric = _numeric_columns(df)

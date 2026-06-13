@@ -6,6 +6,13 @@ venv/
 *.egg-info/
 .pytest_cache/
 
+# Secrets / local env (never commit credentials)
+.env
+
+# Benchmark run artifacts (local-validation output, gitignored manifests)
+*.run.json
+results/
+
 # Data caches (Hugging Face / local downloads)
 .cache/
 data/
@@ -16,11 +23,6 @@ data/
 # `auditor brief` defaults to writing briefing.md in the cwd; ignore those scratch
 # outputs at the repo root while keeping the curated examples/ copies tracked.
 /briefing*.md
-
-# Kaggle benchmark run artifacts: local-validation output and downloaded results.
-*.run.json
-*.task.json
-results/
 
 # OS / editor
 .DS_Store

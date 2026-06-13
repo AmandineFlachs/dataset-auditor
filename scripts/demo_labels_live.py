@@ -6,10 +6,10 @@ recorded facts, not error-prone human labels -- so the only honest way to show
 fixture: a handful of chemical elements with a ``phase_at_stp`` label (solid / liquid /
 gas at ~25 C, 1 atm), a few deliberately wrong, judged by the live model.
 
-A design note worth keeping: an earlier version of this demo also fed melting and
-boiling points as context and asked the model to *derive* the phase. That made it
-WORSE (a 14B model does numeric-threshold reasoning unreliably and the check's
-conservative "treat uncertain as plausible" bias then lets errors through). The check's
+A design note worth keeping: feeding melting and boiling points as context and asking the
+model to *derive* the phase is the wrong job for it -- numeric-threshold reasoning is
+unreliable and the check's conservative "treat uncertain as plausible" bias then lets
+errors through. The check's
 real strength is world knowledge -- "is mercury solid?" is a fact the model knows cold,
 no arithmetic -- so this judges from the element name alone, which is both fairer and
 the use case the check is actually for.

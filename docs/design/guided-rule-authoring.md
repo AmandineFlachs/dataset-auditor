@@ -1,7 +1,7 @@
 # Design note: guided rule-authoring (the question atom)
 
-> Status: **parked design, not built.** This is the planned step *after* the Kaggle
-> benchmark work. Captured here so it survives; revisit once the benchmark layer lands.
+> Status: **built** (`auditor author`). This note captures the original design thinking;
+> see the code in `src/auditor/authoring/` for what shipped.
 
 ## Context
 
@@ -95,10 +95,10 @@ it on one question; **auto-resolution is policy invoking the same function**. So
 - `hands-off` (Level 3): auto-decide everything, stop only on suspicious/low-confidence,
   hand back a graded report of what it decided and why.
 
-How far the knob can safely turn per rule-kind is what the Kaggle benchmark eventually
-calibrates (which candidate kinds the model is reliable on). Slice 1 uses self-rated
-confidence + the flag-rate heuristic; the benchmark hardens the thresholds later. This is
-the concrete payoff that links the benchmark work to this feature.
+How far the knob can safely turn per rule-kind is a calibration question. Slice 1 uses a
+conservative pair of heuristics — the model's self-rated confidence plus the actual
+flag-rate from the dry-run — and the safe default is to ask the human whenever either is
+unsure. The thresholds can be tuned with experience over time.
 
 ## Candidate -> rule mapping (the closed grammar)
 
@@ -167,9 +167,9 @@ LLM and judges values, so evidence is costlier) and the subtle domain calls.
 4. Feed the emitted fragment into a spec and run `auditor run` to confirm the authored
    rules fire exactly as the dry-run predicted (round-trip integrity).
 
-## Why this is the right next step after benchmarks
+## Why this feature earns its keep
 
-The benchmark measures whether a model's judgment is good enough to trust. This feature is
-where that measurement gets *spent*: the calibration from the benchmark sets how far the
-`--autonomy` dial can safely turn per rule-kind. Benchmarks earn the trust; guided
-authoring is the mechanism that turns earned trust into less human involvement.
+It turns "add a dataset" from hand-editing a `DatasetSpec` into a guided conversation: the
+model proposes bounds, each is dry-run against the real check so the human decides on actual
+flag counts, and the `--autonomy` dial controls how much the human is asked. The human stays
+in control; the model only ever *proposes* checks, never edits data.

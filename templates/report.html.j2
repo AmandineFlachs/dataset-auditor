@@ -586,8 +586,8 @@ h1,h2{font-family:var(--font-display);margin:0;letter-spacing:-.02em}
     if(toast){ toast.textContent = 'Downloaded audit-' + DATASET + '.csv'; toast.classList.add('toast--on'); setTimeout(function(){ toast.classList.remove('toast--on'); }, 2200); }
   });
 
-  // Export the human's keep/dismiss/review decisions as JSON, for `auditor capture`
-  // to turn into labelled benchmark cases. Structured (not CSV) so it round-trips cleanly.
+  // Export the human's keep/dismiss/review decisions as JSON (structured, so it
+  // round-trips cleanly if you want to re-load or process your triage decisions later).
   var exj = document.getElementById('export-json');
   if(exj) exj.addEventListener('click', function(){
     var out = [];

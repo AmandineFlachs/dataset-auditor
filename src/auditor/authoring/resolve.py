@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from auditor.authoring.dryrun import Evidence, dry_run
 from auditor.authoring.proposals import Candidate
 
-# Decision thresholds (slice heuristics; the authoring benchmark hardens these later).
+# Decision thresholds (conservative slice heuristics; tune with experience).
 CONF_OK = 0.6          # below this the model defers rather than auto-accept
 TINY_RATE = 0.01       # <= this flagged fraction is "barely fires" -> safe to adopt
 SUSPICIOUS_RATE = 0.5  # >= this flagged fraction means the rule probably flags good data
