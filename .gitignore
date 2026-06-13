@@ -6,6 +6,13 @@ venv/
 *.egg-info/
 .pytest_cache/
 
+# Secrets / local env (never commit credentials)
+.env
+
+# Benchmark run artifacts (local-validation output, gitignored manifests)
+*.run.json
+results/
+
 # Data caches (Hugging Face / local downloads)
 .cache/
 data/

@@ -138,6 +138,19 @@ deterministic-vs-LLM README section, a CHANGELOG, README screenshots of the repo
 an MIT `LICENSE`, and the repo under version control (`git init`, initial `v0.1.0`
 commit). The one remaining step is the public GitHub push + `v0.1.0` tag.
 
+### v2 — benchmark layer + self-improving loop (built, then removed)
+
+A Kaggle-benchmark layer (to score the model-judgment parts) and a self-improving loop
+(`capture` → `select-model`, turning report decisions into model-selection cases) were
+built on the `v2-kaggle-benchmarks` branch, then **deliberately removed**. Two honest
+reasons: (1) the `triage-verdict` benchmark **leaked** — the domain-context grounding it
+fed the model effectively stated the answers, so it measured "can the model read a
+sentence," not domain reasoning; and (2) the conclusions and the self-improving loop were
+**unproven** — tiny case counts (N≈5–17) and no experiment showing the loop actually
+improves model selection. Rather than ship a measurement we couldn't defend, the project
+was cut back to its sound core. The history remains on the branch if any of it is revived
+later (against larger, leakage-controlled case sets).
+
 ## Deferred — what's next
 
 Parked on purpose: this is scoping without creep, and each item notes *why* it waits.

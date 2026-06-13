@@ -11,6 +11,7 @@ as ``python -m auditor.cli``.
 
 from __future__ import annotations
 
+import os
 import webbrowser
 from collections import Counter
 from datetime import datetime
@@ -30,6 +31,36 @@ app = typer.Typer(
 )
 
 
+def _use_model(model: Optional[str]) -> None:
+    """Point the LLM layer at ``model`` for this process, via the standard env carrier.
+
+    ``AUDITOR_LLM_MODEL`` is the single carrier of "the chosen model" across every stage
+    (``LLMClient.from_env`` reads it), so a ``--model`` flag just sets it here, leaving
+    each command's own timeout intact. ``brief``/``triage``/``author`` all read it.
+    """
+    if model:
+        os.environ["AUDITOR_LLM_MODEL"] = model
+
+
+def _spec_with_rules(dataset: Optional[str], rules: Optional[Path]):
+    """Look up the dataset's spec, optionally overlaying an authored rule fragment.
+
+    Closes the authoring loop: rules from ``auditor author`` become a spec the audit uses,
+    without hand-editing ``datasets.py``. Reports how many rule fields were applied.
+    """
+    spec = get(dataset)
+    if rules is None:
+        return spec
+    from auditor.specfrag import apply_fragment, load_fragment
+
+    fields = load_fragment(rules)
+    if not fields:
+        typer.echo(f"{rules} defined no recognised rule fields; auditing with the base spec.")
+        return spec
+    typer.echo(f"applied authored rules from {rules}: {', '.join(sorted(fields))}")
+    return apply_fragment(spec, fields)
+
+
 @app.command()
 def run(
     dataset: Optional[str] = typer.Option(
@@ -40,10 +71,11 @@ def run(
     ),
     out: Path = typer.Option(Path("report.html"), "--out", "-o", help="Where to write the HTML report."),
     cap: int = typer.Option(50, "--cap", help="Max distinct findings shown per check in the report."),
+    rules: Optional[Path] = typer.Option(None, "--rules", help="Apply an authored rule fragment (from `auditor author`) to the spec."),
     open_report: bool = typer.Option(False, "--open", help="Open the report in a browser when done."),
 ) -> None:
     """Audit a dataset and write a self-contained HTML report."""
-    spec = get(dataset)
+    spec = _spec_with_rules(dataset, rules)
     df = load(source, spec=spec)
     findings = run_all(df, spec)
     path = write(findings, spec, out, df=df, cap=cap, generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"))
@@ -52,6 +84,8 @@ def run(
     breakdown = ", ".join(f"{k}={v:,}" for k, v in sorted(by_sev.items())) or "none"
     typer.echo(f"audited {len(df):,} rows of {spec.name!r}: {len(findings):,} findings ({breakdown})")
     typer.echo(f"wrote {path}")
+    if findings:
+        typer.echo(f"next: open {path.name} and review the issues (keep / dismiss / needs-review)")
     if open_report:
         webbrowser.open(path.resolve().as_uri())
 
@@ -71,6 +105,7 @@ def brief(
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Dataset to brief."),
     source: Optional[Path] = typer.Option(None, "--source", "-s", help="Brief this CSV instead."),
     out: Path = typer.Option(Path("briefing.md"), "--out", "-o", help="Where to write the Markdown briefing."),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Local model to use (default: AUDITOR_LLM_MODEL)."),
 ) -> None:
     """Write a local-LLM research briefing (column meanings, pitfalls, suggested checks).
 
@@ -80,6 +115,7 @@ def brief(
     from auditor.llm import LLMTimeout
     from auditor.research import brief as make_briefing, to_markdown
 
+    _use_model(model)
     spec = get(dataset)
     df = load(source, spec=spec)
     try:
@@ -107,6 +143,8 @@ def triage(
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Dataset to audit then triage."),
     source: Optional[Path] = typer.Option(None, "--source", "-s", help="Audit this CSV instead."),
     out: Optional[Path] = typer.Option(None, "--out", "-o", help="Write the triage to this Markdown file (else print)."),
+    rules: Optional[Path] = typer.Option(None, "--rules", help="Apply an authored rule fragment (from `auditor author`) to the spec."),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Local model to use (default: AUDITOR_LLM_MODEL)."),
 ) -> None:
     """Run the audit, then ask the local LLM to prioritize its findings (advisory).
 
@@ -117,7 +155,8 @@ def triage(
     from auditor.llm import LLMTimeout
     from auditor.triage import issue_groups, to_markdown, triage as run_triage
 
-    spec = get(dataset)
+    _use_model(model)
+    spec = _spec_with_rules(dataset, rules)
     df = load(source, spec=spec)
     findings = run_all(df, spec)
     groups = issue_groups(findings)
@@ -142,6 +181,93 @@ def triage(
         typer.echo(f"wrote triage of {len(groups)} issues -> {out}")
     else:
         typer.echo(md)
+
+
+@app.command(name="rubric")
+def rubric_cmd(
+    dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Dataset to score."),
+    source: Optional[Path] = typer.Option(None, "--source", "-s", help="Score this CSV instead."),
+    rules: Optional[Path] = typer.Option(None, "--rules", help="Apply an authored rule fragment to the spec."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the rubric as JSON instead of a table."),
+) -> None:
+    """Score dataset readiness: per-dimension clean rates from the deterministic findings.
+
+    Aggregates the deterministic checks into completeness / consistency / plausibility /
+    duplication / privacy, plus an overall readiness. This is a deterministic roll-up of
+    facts: LLM-judged labels are advisory only and never move a score. A dimension whose
+    checks did not run for this dataset shows 'n/a', never a misleading 100.
+    """
+    import json
+
+    from auditor import rubric as rubric_mod
+
+    spec = _spec_with_rules(dataset, rules)
+    df = load(source, spec=spec)
+    findings = run_all(df, spec)
+    r = rubric_mod.score(findings, len(df), not_assessed=rubric_mod.unassessed_dimensions(spec))
+
+    if json_out:
+        typer.echo(json.dumps(r.as_dict(), indent=2))
+        return
+
+    head = f"{r.readiness:.0f}/100" if r.readiness is not None else "n/a"
+    typer.echo(f"readiness: {head}   ({spec.name}, {r.n_rows:,} rows)")
+    for d in r.dimensions:
+        if not d.assessed:
+            typer.echo(f"  {d.name:<13} n/a   (not assessed for this dataset)")
+        else:
+            if d.affected_rows:
+                tail = f"{d.affected_rows:,} rows affected"
+            elif d.n_findings:
+                tail = f"{d.n_findings} dataset-level issue(s)"
+            else:
+                tail = "clean"
+            typer.echo(f"  {d.name:<13} {d.score:5.1f}   ({tail})")
+        if d.advisory:
+            typer.echo(
+                f"  {'':13}       advisory: {d.advisory['labels_flagged_rows']} rows "
+                f"LLM-flagged (not scored)"
+            )
+
+
+@app.command()
+def author(
+    dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Dataset to author range rules for."),
+    source: Optional[Path] = typer.Option(None, "--source", "-s", help="Author from this CSV instead."),
+    autonomy: str = typer.Option("balanced", "--autonomy", help="ask-all | balanced | hands-off."),
+    out: Path = typer.Option(Path("authored_rules.py"), "--out", "-o", help="Where to write the spec fragment (a .log.json sits beside it)."),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Local model to use (default: AUDITOR_LLM_MODEL)."),
+) -> None:
+    """Guided rule-authoring: the model proposes range rules, you approve them (slice 1).
+
+    For each numeric column the model proposes a bound, which is dry-run against the real
+    check so you decide on actual flag counts. Under --autonomy ask-all you answer every
+    question (or say 'you choose'); balanced auto-decides the safe ones; hands-off decides
+    all and reports what it did. Needs a local LLM server. Emits a range_rules fragment
+    plus a JSON decision log. Never edits data -- it only proposes checks.
+    """
+    import json
+
+    from auditor.authoring import AUTONOMY, run_session, summarize
+
+    _use_model(model)
+    if autonomy not in AUTONOMY:
+        typer.echo(f"--autonomy must be one of {', '.join(AUTONOMY)}")
+        raise typer.Exit(code=2)
+
+    spec = get(dataset)
+    df = load(source, spec=spec)
+    result = run_session(df, spec, autonomy)
+    if not result.log:
+        typer.echo("local LLM not reachable, or no candidates proposed - nothing to author "
+                   "(start the vLLM server, e.g. AUDITOR_LLM_MODEL=...).")
+        raise typer.Exit(code=1)
+
+    out.write_text(result.fragment, encoding="utf-8")
+    log_path = out.with_suffix(".log.json")
+    log_path.write_text(json.dumps(result.log, indent=2), encoding="utf-8")
+    typer.echo(summarize(result))
+    typer.echo(f"wrote {out} (+ decision log {log_path.name})")
 
 
 @app.command(name="profile")

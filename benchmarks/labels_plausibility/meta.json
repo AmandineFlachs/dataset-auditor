@@ -1,0 +1,22 @@
+{
+  "task": "labels-plausibility",
+  "description": "Given an element and a claimed phase-at-STP, judge plausible/implausible. A vocabulary check passes any value in {solid, liquid, gas}; only world knowledge catches a planted defect like mercury labelled 'solid'. Reuses the shipped build_label_prompt + LabelVerdict; passes NO answer-bearing context.",
+  "column": "phase_at_stp",
+  "allowed": ["solid", "liquid", "gas"],
+  "expected_values": ["plausible", "implausible"],
+  "context_fields": ["element", "symbol", "atomic_number", "period"],
+  "positive_class": "implausible",
+  "class_weights": {"plausible": 1.0, "implausible": 1.0},
+  "leakage_policy": {
+    "no_domain_context": true,
+    "forbid_terms": ["solid", "liquid", "gas", "melting", "boiling", "melts", "boils"]
+  },
+  "scorer_version": "1.0.0",
+  "frozen_prompt": {
+    "builder": "auditor.checks.labels.build_label_prompt",
+    "schema": "LabelVerdict",
+    "hash": "sha256:03bab39d5ec0e53c73e1f48edfa8013861b8bc355ffd47d934fa95d624e3ff2f",
+    "frozen_at": "2026-06-13"
+  },
+  "splits": {"dev": 24, "calibration": 30, "test": 40}
+}

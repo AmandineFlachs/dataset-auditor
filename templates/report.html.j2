@@ -156,6 +156,22 @@ h1,h2{font-family:var(--font-display);margin:0;letter-spacing:-.02em}
 .ss-sev{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)}
 .ss-sev b{color:var(--ink);font-variant-numeric:tabular-nums;min-width:30px;display:inline-block;text-align:right}
 .ss-bar{flex:1;min-width:160px}
+.readiness{margin:14px 0 0;padding:16px 20px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow)}
+.rd-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+.rd-title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3)}
+.rd-overall{font-family:var(--font-display);font-size:22px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.rd-overall small{font-size:12px;color:var(--ink-3);font-weight:400}
+.rd-dims{display:flex;flex-direction:column;gap:8px}
+.rd-dim{display:grid;grid-template-columns:120px 1fr 96px;align-items:center;gap:12px}
+.rd-name{font-size:13px;color:var(--ink-2);text-transform:capitalize}
+.rd-track{height:10px;border-radius:6px;background:var(--line);overflow:hidden}
+.rd-track.rd-na{background:repeating-linear-gradient(45deg,var(--line),var(--line) 4px,transparent 4px,transparent 8px)}
+.rd-fill{height:100%;border-radius:6px;background:var(--c-clean)}
+.rd-fill.rd-warn{background:var(--c-warning)}
+.rd-fill.rd-bad{background:var(--c-critical)}
+.rd-val{font-size:12.5px;color:var(--ink-2);text-align:right;font-variant-numeric:tabular-nums}
+.rd-val.rd-muted{color:var(--ink-3)}
+.rd-adv{margin-top:10px;font-size:11.5px;color:var(--ink-3);font-style:italic}
 .stream-controls{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 0 14px;margin-top:14px;flex-wrap:wrap}
 .stream-body{padding:0 32px 80px}
 .group{margin-top:30px}
@@ -261,7 +277,8 @@ h1,h2{font-family:var(--font-display);margin:0;letter-spacing:-.02em}
     <div class="appbar-r">
       {% if groups %}<span class="resolved-pill">triaged <span class="resolved-num" id="triaged-count">0</span></span>{% endif %}
       <span class="critical-flag" data-zero="{{ 'true' if stats.error == 0 else 'false' }}"><span class="sev-dot sev-critical"></span>{{ "{:,}".format(stats.error) }} {{ sev_labels['error'] }}</span>
-      {% if groups %}<button class="btn btn-ghost btn-sm" id="export">&#8615; Export</button>{% endif %}
+      {% if groups %}<button class="btn btn-ghost btn-sm" id="export">&#8615; Export CSV</button>{% endif %}
+      {% if groups %}<button class="btn btn-ghost btn-sm" id="export-json">&#8615; Export decisions</button>{% endif %}
     </div>
   </header>
 
@@ -316,6 +333,32 @@ h1,h2{font-family:var(--font-display);margin:0;letter-spacing:-.02em}
             <div class="ss-bar"><div class="dist-bar" style="height:10px">{{ dist(stats.error, stats.warn, stats.info, true) }}</div></div>
           </div>
 
+          {% if readiness %}
+          <div class="readiness">
+            <div class="rd-head">
+              <div class="rd-title">Dataset readiness</div>
+              <div class="rd-overall">{% if readiness.readiness is not none %}{{ readiness.readiness }}<small>/100</small>{% else %}n/a{% endif %}</div>
+            </div>
+            <div class="rd-dims">
+              {% for d in readiness.dimensions %}
+              <div class="rd-dim">
+                <div class="rd-name">{{ d.name }}</div>
+                {% if d.assessed %}
+                <div class="rd-track"><div class="rd-fill {% if d.score < 70 %}rd-bad{% elif d.score < 95 %}rd-warn{% endif %}" style="width:{{ d.score }}%"></div></div>
+                <div class="rd-val">{{ d.score }}{% if d.affected_rows %} &middot; {{ "{:,}".format(d.affected_rows) }} rows{% endif %}</div>
+                {% else %}
+                <div class="rd-track rd-na"></div>
+                <div class="rd-val rd-muted">not assessed</div>
+                {% endif %}
+              </div>
+              {% endfor %}
+            </div>
+            {% for d in readiness.dimensions if d.advisory %}
+            <div class="rd-adv">Advisory (not scored): the LLM flagged {{ d.advisory.labels_flagged_rows }} {{ d.name }} value(s) for human review.</div>
+            {% endfor %}
+          </div>
+          {% endif %}
+
           <div class="stream-controls">
             <div class="search">
               <span class="search-ic" aria-hidden="true">&#9906;</span>
@@ -349,7 +392,7 @@ h1,h2{font-family:var(--font-display);margin:0;letter-spacing:-.02em}
                 <button type="button" class="issue-head">
                   <span class="issue-rail"></span>
                   <span class="sev-dot sev-{{ sc }}"></span>
-                  <span class="issue-row-no mono">{% if r.count == 1 %}{{ r.sample_ids[0] if r.sample_ids else "&mdash;" }}{% else %}&times;{{ "{:,}".format(r.count) }}{% endif %}</span>
+                  <span class="issue-row-no mono">{% if r.count == 1 %}{% if r.sample_ids %}{{ r.sample_ids[0] }}{% else %}&mdash;{% endif %}{% else %}&times;{{ "{:,}".format(r.count) }}{% endif %}</span>
                   <span class="issue-title">{{ r.message }}{% if r.field %}<span class="field-chip mono">{{ r.field }}</span>{% endif %}</span>
                   <span class="issue-meta">
                     <span class="status-tag" data-status style="display:none"></span>
@@ -583,6 +626,34 @@ h1,h2{font-family:var(--font-display);margin:0;letter-spacing:-.02em}
     a.href = url; a.download = 'audit-' + DATASET + '.csv';
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
     if(toast){ toast.textContent = 'Downloaded audit-' + DATASET + '.csv'; toast.classList.add('toast--on'); setTimeout(function(){ toast.classList.remove('toast--on'); }, 2200); }
+  });
+
+  // Export the human's keep/dismiss/review decisions as JSON (structured, so it
+  // round-trips cleanly if you want to re-load or process your triage decisions later).
+  var exj = document.getElementById('export-json');
+  if(exj) exj.addEventListener('click', function(){
+    var out = [];
+    issues.forEach(function(i){
+      var rec = state[i.getAttribute('data-fkey')] || {};
+      if(!rec.s) return;  // only rows the reviewer actually decided on
+      out.push({
+        dataset: DATASET,
+        check: i.getAttribute('data-check'),
+        field: i.getAttribute('data-field'),
+        message: i.getAttribute('data-msg'),
+        evidence: i.getAttribute('data-ev'),
+        severity: i.getAttribute('data-sev'),
+        count: Number(i.getAttribute('data-count')) || 0,
+        status: rec.s,
+        note: rec.n || ''
+      });
+    });
+    var blob = new Blob([JSON.stringify(out, null, 2)], {type: 'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = 'decisions-' + DATASET + '.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    if(toast){ toast.textContent = out.length ? ('Exported ' + out.length + ' decision(s)') : 'No decisions yet — keep/dismiss some issues first'; toast.classList.add('toast--on'); setTimeout(function(){ toast.classList.remove('toast--on'); }, 2600); }
   });
 })();
 </script>
