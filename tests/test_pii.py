@@ -77,3 +77,29 @@ def test_multiple_columns_scanned():
     kinds = {f.check for f in pii.check(df, columns=["a", "b"])}
     assert "pii.email" in kinds
     assert "pii.phone" in kinds
+
+
+def test_auto_detects_text_columns_when_none_declared():
+    # With no columns declared, the check auto-scans the text columns (never numeric ones).
+    df = pd.DataFrame(
+        {"row_id": [0, 1], "note": ["reach me at a@b.com", "plain"], "mass_g": [1.0, 2.0]}
+    )
+    findings = pii.check(df)  # no columns argument
+    assert [f.check for f in findings] == ["pii.email"]
+    assert findings[0].field == "note"
+
+
+def test_auto_mode_runs_only_rigid_detectors():
+    # A phone number is flagged only when its column is explicitly declared free text;
+    # auto mode sticks to the low-false-positive identifiers (email, SSN).
+    df = pd.DataFrame({"row_id": [0], "note": ["call 415-555-2671"]})
+    auto = {f.check for f in pii.check(df)}
+    declared = {f.check for f in pii.check(df, columns=["note"])}
+    assert "pii.phone" not in auto
+    assert "pii.phone" in declared
+
+
+def test_purely_numeric_frame_has_no_scannable_columns():
+    df = pd.DataFrame({"row_id": [0, 1], "mass_g": [1.0, 2.0]})
+    assert pii.scannable_columns(df) == []
+    assert pii.check(df) == []

@@ -81,7 +81,7 @@ def render(
     groups = _grouped(findings, cap, indexed)
     overview = _overview(df, spec) if df is not None else None
     n_cols = overview["n_cols"] if overview else None
-    readiness = rubric.score(findings, n_rows, not_assessed=rubric.unassessed_dimensions(spec))
+    readiness = rubric.score(findings, n_rows, not_assessed=rubric.unassessed_dimensions(spec, df))
     return _env().get_template(TEMPLATE_NAME).render(
         dataset=spec.name,
         file_name=spec.filename,

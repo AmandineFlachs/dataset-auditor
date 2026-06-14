@@ -156,12 +156,14 @@ def score(
     return Rubric(dims, readiness, n_rows)
 
 
-def unassessed_dimensions(spec) -> tuple[str, ...]:
+def unassessed_dimensions(spec, df=None) -> tuple[str, ...]:
     """Which dimensions a given spec does not meaningfully assess (so they score None).
 
     Derived from what `build_checks` actually runs for this spec: schema and duplicates
     always run (completeness / duplication always assessed); the rest are gated by spec
-    config.
+    config. Privacy is special: the PII check always runs (auto-scanning text columns when
+    none are declared), so privacy is unassessed only when there is genuinely no text to
+    scan — which needs ``df`` to tell. Without ``df`` it falls back to the spec-only rule.
     """
     na: list[str] = []
     if not (spec.consistency_rules or spec.formula_rules):
@@ -169,5 +171,8 @@ def unassessed_dimensions(spec) -> tuple[str, ...]:
     if not (spec.range_rules or spec.null_island):
         na.append("plausibility")
     if not spec.pii_text_columns:
-        na.append("privacy")
+        from auditor.checks import pii
+
+        if df is None or not pii.scannable_columns(df):
+            na.append("privacy")
     return tuple(na)

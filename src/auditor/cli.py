@@ -204,7 +204,7 @@ def rubric_cmd(
     spec = _spec_with_rules(dataset, rules)
     df = load(source, spec=spec)
     findings = run_all(df, spec)
-    r = rubric_mod.score(findings, len(df), not_assessed=rubric_mod.unassessed_dimensions(spec))
+    r = rubric_mod.score(findings, len(df), not_assessed=rubric_mod.unassessed_dimensions(spec, df))
 
     if json_out:
         typer.echo(json.dumps(r.as_dict(), indent=2))

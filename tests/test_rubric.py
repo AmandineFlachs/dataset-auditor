@@ -70,3 +70,15 @@ def test_unassessed_dimensions_from_spec():
         assert isinstance(na, tuple)
         # schema + duplicates always run, so these are never "not assessed"
         assert "completeness" not in na and "duplication" not in na
+
+
+def test_privacy_assessed_when_text_columns_present():
+    import pandas as pd
+
+    # PII auto-scans, so privacy is assessed whenever there's text to scan, and only
+    # unassessed on a purely numeric frame.
+    spec = get("meteorites")  # declares no pii_text_columns
+    with_text = pd.DataFrame({"row_id": [0], "name": ["Aachen"]})
+    numeric_only = pd.DataFrame({"row_id": [0], "mass_g": [1.0]})
+    assert "privacy" not in rubric.unassessed_dimensions(spec, with_text)
+    assert "privacy" in rubric.unassessed_dimensions(spec, numeric_only)
