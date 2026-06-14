@@ -1,6 +1,10 @@
 # Next steps — dataset-auditor
 
-_Updated 2026-06-14. Active branch: **`v2`** (pushed to origin). `main` = v1, untouched._
+_Updated 2026-06-14 (end of day). Active branch: **`v2`**. `main` = v1, untouched. Pick up at
+next step #1 (test more models)._
+
+> **Unpushed:** today's work (growth commit `5701e8a` + this doc update) is committed **locally
+> only** — origin/`v2` is behind. `git push` when ready.
 
 ## Where things stand (v2 branch)
 
