@@ -334,8 +334,11 @@ LEMAT_BULK = DatasetSpec(
         "exchange-correlation functional, one of {pbe, pbesol, scan}. The three "
         "formula columns (descriptive, reduced, anonymous) describe the same "
         "composition and should be mutually consistent. The same immutable_id can "
-        "recur across functionals (expected), but the computed properties for one "
-        "material should be physically consistent."
+        "recur across functionals (expected): pbe, pbesol and scan use different "
+        "energy references, so the total DFT energy is not comparable across "
+        "functionals and a spread in energy across rows sharing an immutable_id is "
+        "expected physics, not a defect. Other per-material properties (such as the "
+        "formula, element list and site count) should still be mutually consistent."
     ),
 )
 

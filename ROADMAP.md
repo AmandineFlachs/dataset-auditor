@@ -1,9 +1,11 @@
 # Roadmap
 
-dataset-auditor is **`v0.1.0`**. The core — the check families plus one
-self-contained HTML report, working across more than one dataset — is built, and
-the live local-LLM features have run against a real server. This page records
-**what has been done**, in build order, then the ideas deliberately parked for later.
+dataset-auditor is **`v0.2.0`**. The `v0.1.0` core — the check families plus one
+self-contained HTML report, working across more than one dataset, with the live local-LLM
+features run against a real server — is built. `v0.2.0` adds a **leakage-safe evaluation layer
+and a readiness rubric**. This page records **what has been done**, in build order, then the
+ideas deliberately parked for later. The active next step is **publishing the proven benchmark
+to Kaggle**.
 
 ## Done so far
 
@@ -50,10 +52,12 @@ keep working. In build order:
      signal. The fuzzy embedding tier (sentence-transformers) is the deferred
      extension; it needs a heavy model and barely fits these scientific columns.
    - **PII — `pii.py` (regex tier).** Dependency-free patterns for
-     emails, SSNs, Luhn-checked cards, phones, IPv4, scanning only the columns a
-     spec names in `pii_text_columns`, with **masked evidence** so the report does
-     not itself leak. Presidio NER and an LLM pass are the deferred escalation.
-     Neither flagship has free-text columns, so it is demonstrated on fixtures.
+     emails, SSNs, Luhn-checked cards, phones, IPv4, with **masked evidence** so the
+     report does not itself leak. It **always runs**: declared `pii_text_columns` get
+     every detector; with none declared it auto-detects the text columns and scans them
+     for the rigid identifiers (email, SSN) only — so privacy is never a blind spot while
+     numeric science columns stay safe from false positives. Both flagships come back
+     clean. Presidio NER and an LLM pass are the deferred escalation.
    - **Categorical plausibility — `labels.py`.** Label-noise reframed: the
      LLM judges whether a categorical value is plausible given the row + domain
      context. The first consumer of `auditor.llm`. Emits `labels.implausible` (WARN),
@@ -135,12 +139,68 @@ meanings, e.g. `chemical_formula_anonymous`) that reinforce the advisory-only fr
 
 CLI (`run`, `datasets`, `profile`, `brief`, `triage`), docs, the
 deterministic-vs-LLM README section, a CHANGELOG, README screenshots of the report,
-an MIT `LICENSE`, and the repo under version control (`git init`, initial `v0.1.0`
-commit). The one remaining step is the public GitHub push + `v0.1.0` tag.
+an MIT `LICENSE`, and the repo under version control. Shipped publicly and tagged `v0.1.0`.
+
+### v2 — leakage-safe evaluation + readiness rubric ✅ (`v0.2.0`)
+
+A first v2 attempt (a Kaggle-benchmark layer + a `capture`/`select-model` self-improving
+loop) was **removed**: the `triage-verdict` benchmark *leaked* (its domain-context grounding
+stated the answers, measuring reading not reasoning), and the loop was *unproven* (tiny
+N≈5–17, no experiment). Rather than ship a number we couldn't defend, it was cut and the
+eval layer rebuilt **scientifically**. `main` stays v1; this work lives on branch `v2`.
+
+What v2 adds:
+
+1. **Evaluation protocol first** — `EVAL_PROTOCOL.md` (scope tiers, leakage/contamination
+   definitions, dev/calibration/hidden splits, prompt- and scoring-freeze, held-out-only
+   reporting with confidence intervals + baselines), plus `docs/methodology.md` and
+   `docs/leakage_checklist.md`.
+2. **Leakage-safe benchmark, local-only (no Kaggle SDK).** A pure model-free harness
+   (`benchmarks/shared/`) + two tasks that reuse the shipped `build_label_prompt` /
+   `LabelVerdict` but pass **no** answer-bearing context: `labels_plausibility`
+   (phase-at-STP) and `element_classification` (metal/nonmetal/metalloid). Three disjoint
+   splits each, balanced classes, an automated leakage linter, a frozen-prompt hash, and a
+   value↔label decorrelation guard — all enforced in CI.
+3. **Reasoning mode.** The strict (forced-JSON) path made the small Qwen3-4B confabulate
+   and score at the floor (0.500 held-out, 0/20 defects). Letting it *think* first
+   (opt-in `reasoning` in `auditor.llm`, default-on for the `labels` check) took it to
+   **1.000 held-out on both domains** (80/80 each, 95% CI [0.954, 1.000]), beating the
+   vocabulary/majority floors.
+4. **Readiness rubric** — `auditor rubric` + a report panel: per-dimension scores
+   (completeness/consistency/plausibility/duplication/privacy) + overall, a deterministic
+   roll-up of the findings; LLM-judged labels stay advisory and never move a score.
+
+Held-out sets were grown 40 → **80 per task** (CI tightened to [0.954, 1.000]). A second model
+(Qwen3.5-0.8B) was then tried as a contrast: it sits **below the harness's structured-output
+floor** — it echoes the schema instead of a verdict, so it cannot complete the benchmark under
+the frozen prompt. A side-probe confirms it knows the chemistry; the verbose schema-in-prompt is
+the limiter. The frozen prompt was *not* relaxed to rescue a score (that would tune on held-out
+data), so the honest result is "4B reasoning 1.000; 0.8B non-compliant." Enough to defend the
+core claim, so further model sweeps are deferred (see below).
+
+Status: built and **held-out-verified on Qwen3-4B** (223 tests pass). Shipped as `v0.2.0`.
 
 ## Deferred — what's next
 
 Parked on purpose: this is scoping without creep, and each item notes *why* it waits.
+
+- **Publish the proven benchmark to Kaggle** — the **active next step**. The case set is grown
+  (N=80) and held-out-verified; this is the distribution step. Open decisions before it ships:
+  (1) **how to publish without burning the held-out test** — a Kaggle Community Benchmark keeps
+  the test answers server-side (preferred), versus a plain Dataset that would expose them and
+  void future held-out use; (2) **the server-side import wall** — vendor `benchmarks/shared/`
+  into the task or attach the repo as a dataset; (3) carry the leakage discipline (frozen prompt,
+  baselines, no answer-bearing context) into the published artifact; (4) re-add the `kaggle` dev
+  extra. Scope: publish both proven tasks.
+- **More eval depth is deferred as gold-plating** (decided 2026-06-14). The core claim — the
+  advisory LLM label check is trustworthy — is already defended (reasoning-mode 1.000, held-out,
+  leakage-safe, N=80, baselines beaten). So: *more models* (low marginal value; memorization is
+  defended structurally, and the 0.8B "can't comply" point already exists) and a *second kind of
+  task* (calibration would validate the advisory-only `confidence` field; an LLM-as-judge task
+  imports a model-grading-model trust dependency) both wait until there's a concrete reason to
+  reopen them.
+- **The self-improving loop stays out** unless revived with an actual experiment showing it
+  improves model selection (its history is on `v2-kaggle-benchmarks`).
 
 - **Config-file rules.** Plausibility rules now live per-dataset in
   `datasets.py` (in-code `DatasetSpec.range_rules`), not scattered through the

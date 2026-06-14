@@ -9,11 +9,12 @@ model / the local server, so they are deferred; this tier runs everywhere, alway
 
 Two deliberate choices:
 
-* **Only configured columns are scanned.** ``DatasetSpec.pii_text_columns`` names the
-  free-text fields; numeric science columns are never examined, so a lattice constant
-  is never mistaken for a phone number. Both science flagships declare no such
-  columns, so PII is demonstrated on a fixture — honestly, since neither dataset
-  contains any.
+* **Always runs; declaring columns widens the sweep.** If ``DatasetSpec.pii_text_columns``
+  names the free-text fields, every detector runs on them. If none are named, the check
+  falls back to auto-detecting the text columns and scanning them for the *rigid, low
+  false-positive* identifiers only (email, SSN) — so privacy is never an unexamined blind
+  spot, while a lattice constant is still never mistaken for a phone number. Declaring
+  columns is how you opt into the noisier detectors (phone, card, IPv4).
 * **Evidence is masked.** The whole point is to flag a leak; a report that printed the
   raw SSN would *be* the leak. So evidence shows enough to locate the value
   (``j****@e****.com``) without reproducing it.
@@ -82,23 +83,45 @@ _DETECTORS: tuple[_Detector, ...] = (
     ),
 )
 
+# Detectors safe to run on *auto-detected* columns: rigid shapes that essentially never
+# false-positive on scientific data. The noisier detectors (phone/card/ipv4) run only on
+# columns a spec explicitly declares as free text.
+_RIGID_KINDS = ("email", "ssn")
+_RIGID_DETECTORS = tuple(d for d in _DETECTORS if d.kind in _RIGID_KINDS)
+
+
+def _text_columns(df: pd.DataFrame) -> list[str]:
+    """Columns (other than ``row_id``) holding at least one string value."""
+    return [
+        c for c in df.columns
+        if c != "row_id" and df[c].map(lambda v: isinstance(v, str)).any()
+    ]
+
+
+def scannable_columns(df: pd.DataFrame, declared=()) -> list[str]:
+    """The columns PII will actually scan: the declared free-text columns when any are
+    named, otherwise the auto-detected text columns. Empty only when there is no text."""
+    if declared:
+        return [c for c in declared if c in df.columns]
+    return _text_columns(df)
+
 
 def check(df: pd.DataFrame, columns=()) -> list[Finding]:
-    """Scan each configured free-text column for PII patterns."""
+    """Scan for PII. Declared columns get every detector; with none declared, fall back to
+    the auto-detected text columns scanned for the rigid identifiers (email, SSN) only."""
+    detectors = _DETECTORS if columns else _RIGID_DETECTORS
     findings: list[Finding] = []
-    for col in columns:
-        if col not in df.columns:
-            continue
+    for col in scannable_columns(df, columns):
         for row_id, value in zip(df["row_id"], df[col]):
             if not isinstance(value, str):
                 continue
-            findings.extend(_scan_cell(int(row_id), col, value))
+            findings.extend(_scan_cell(int(row_id), col, value, detectors))
     return findings
 
 
-def _scan_cell(row_id: int, col: str, value: str) -> list[Finding]:
+def _scan_cell(row_id: int, col: str, value: str, detectors=_DETECTORS) -> list[Finding]:
     findings: list[Finding] = []
-    for det in _DETECTORS:
+    for det in detectors:
         for match in det.pattern.findall(value):
             if det.validate and not det.validate(match):
                 continue

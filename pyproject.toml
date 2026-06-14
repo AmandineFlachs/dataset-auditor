@@ -40,5 +40,7 @@ build-backend = "hatchling.build"
 packages = ["src/auditor"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+# "benchmarks" is on the path so tests can import the pure, model-free benchmark
+# harness (shared/) and the task modules; the task run.py scripts are not collected.
+pythonpath = ["src", "benchmarks"]
 testpaths = ["tests"]
