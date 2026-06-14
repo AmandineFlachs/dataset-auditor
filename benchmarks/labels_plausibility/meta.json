@@ -18,5 +18,5 @@
     "hash": "sha256:03bab39d5ec0e53c73e1f48edfa8013861b8bc355ffd47d934fa95d624e3ff2f",
     "frozen_at": "2026-06-13"
   },
-  "splits": {"dev": 24, "calibration": 30, "test": 40}
+  "splits": {"dev": 24, "calibration": 30, "test": 80}
 }

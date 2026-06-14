@@ -1,7 +1,6 @@
 # Next steps — dataset-auditor
 
-_Updated 2026-06-13 (end of day). Active branch: **`v2`** (pushed to origin). `main` = v1,
-untouched. Pick up here tomorrow._
+_Updated 2026-06-14. Active branch: **`v2`** (pushed to origin). `main` = v1, untouched._
 
 ## Where things stand (v2 branch)
 
@@ -16,8 +15,13 @@ The leakage-safe evaluation layer + readiness rubric are built and held-out-veri
   decorrelation guard — all enforced by `tests/test_bench_tasks.py`.
   - `labels_plausibility` (phase-at-STP) and `element_classification` (metal/nonmetal/metalloid).
 - **Reasoning mode** (`auditor.llm`, opt-in; default-on for the `labels` check). Held-out on
-  Qwen3-4B: strict 0.500 → **reasoning 1.000 (40/40) on BOTH domains**, beating the 0.500
-  baselines.
+  Qwen3-4B: strict 0.500 → **reasoning 1.000 on BOTH domains**, beating the 0.500 baselines.
+- **Held-out sets grown 40 → 80 per domain (2026-06-14).** Both now report **1.000, 95% CI
+  [0.954, 1.000]** (was ~[0.912, 1.000] at N=40) — the CI tightening was the goal. The 40 new
+  cases were authored via `benchmarks/_grow/grow.py` (metadata/ids/balance correct by
+  construction; a disjointness-aware selector reads only existing ids, never test labels) and
+  the chemistry ground truth was adversarially verified by a 3-lens workflow (clean, 0
+  disputes). Re-run if needed: `python benchmarks/_grow/grow.py [--append]`.
 - **Readiness rubric** (`auditor rubric` + report panel): deterministic per-dimension scores
   (meteorites 93, LeMat 98); LLM labels advisory-only.
 
@@ -28,10 +32,14 @@ Needs the local vLLM up; if a call is slow, restart vLLM with a lower `--gpu-mem
 
 ## Next steps (in priority order)
 
-1. **Grow the case set further + test more models.** Each held-out set is N=40 (CI ~±9pp at
-   100%). Add more cases (and/or a third domain) to tighten it, and run several models so the
-   result becomes a real comparison, not one model. Highest value, lowest risk. Keep the
-   discipline: balanced, disjoint, leakage-linted, don't open `test` while authoring.
+1. **Test more models** (the still-open half of the old #1; growth to N=80 is done). One
+   model isn't a comparison — run several so reasoning-mode's 1.000 is shown to generalise, not
+   memorised. **Likely blocked by hardware**: only Qwen3-4B weights are local, 14B was abandoned
+   on VRAM. Options: smaller models that fit the 3090 (e.g. Qwen3-1.7B/0.6B as a weaker
+   contrast), or an API model as an upper bound. Decide the model set first.
+   - _Optional further growth:_ a third domain, or push N past 80 (CI lower bound is 0.954 now;
+     diminishing returns). Keep the discipline: balanced, disjoint, leakage-linted, author via
+     `grow.py` so test labels are never inspected.
 2. **Phase 5: a second *kind* of task** (e.g. brief-grounding) — only after #1. "Usefulness"
    isn't a clean binary, so it needs an LLM-as-judge grader with its own leakage controls +
    human spot-check. Scaffold lives at `benchmarks/triage_quality/`.

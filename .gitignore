@@ -35,3 +35,6 @@ docs/social/
 
 # Local Claude Code settings (machine-specific permission allowlist)
 .claude/
+
+# scratch outputs of benchmarks/_grow/grow.py (regenerable)
+benchmarks/_grow/*_candidates.jsonl
