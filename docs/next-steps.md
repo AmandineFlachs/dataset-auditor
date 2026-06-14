@@ -1,15 +1,16 @@
 # Next steps — dataset-auditor
 
-_Updated 2026-06-14 (end of day). Active branch: **`v2`**. `main` = v1, untouched. Pick up at
-next step #1 (test more models)._
+_Updated 2026-06-14. Active branch: **`v2`**. `main` = v1, untouched. **Decision locked: ship +
+publish what's proven; defer more eval depth** (see Deferred). Pick up at step #1 (ship `v0.2.0`),
+then step #2 (publish to Kaggle — the part to dive into next)._
 
-> **Unpushed:** today's work (growth commit `5701e8a` + this doc update) is committed **locally
-> only** — origin/`v2` is behind. `git push` when ready.
+> **Unpushed:** v2 is ahead of origin and has uncommitted doc edits (the `v0.2.0` README / ROADMAP
+> / CHANGELOG rewrite). Commit + `git push` v2, then do the ship steps below.
 
 ## Where things stand (v2 branch)
 
 The leakage-safe evaluation layer + readiness rubric are built and held-out-verified.
-**219 tests pass.**
+**223 tests pass.**
 
 - **Evaluation protocol** locked first: `EVAL_PROTOCOL.md`, `docs/methodology.md`,
   `docs/leakage_checklist.md`.
@@ -27,7 +28,17 @@ The leakage-safe evaluation layer + readiness rubric are built and held-out-veri
   the chemistry ground truth was adversarially verified by a 3-lens workflow (clean, 0
   disputes). Re-run if needed: `python benchmarks/_grow/grow.py [--append]`.
 - **Readiness rubric** (`auditor rubric` + report panel): deterministic per-dimension scores
-  (meteorites 93, LeMat 98); LLM labels advisory-only.
+  (meteorites 94, LeMat 99); LLM labels advisory-only.
+- **Second model tried — Qwen3.5-0.8B (2026-06-14): below the protocol floor.** It cannot
+  complete either held-out benchmark under the frozen prompt — it echoes the verbose pydantic
+  schema back instead of instantiating it (deterministic at `temperature=0`, so retries don't
+  help; same failure in reasoning and strict mode). A side-probe with a *flattened* schema shows
+  it knows the chemistry (Iron→solid, conf 0.99), so this is schema-in-prompt brittleness, not
+  ignorance. We did **not** flatten the prompt to rescue a score — that would be tuning the
+  frozen prompt on the held-out set and would break comparability with the 4B. So the honest
+  multi-model result: **4B reasoning 1.000 on both domains; 0.8B non-compliant (no score).**
+  The 1.000 is not trivially reproducible by any model, and the `judge()` contract is brittle
+  for very small models (see robustness item below).
 
 Run a benchmark: `python benchmarks/run.py --task <labels_plausibility|element_classification>
 --split <dev|calibration|test> --reasoning -m Qwen/Qwen3-4B` (held-out needs `--confirm-final`).
@@ -36,25 +47,42 @@ Needs the local vLLM up; if a call is slow, restart vLLM with a lower `--gpu-mem
 
 ## Next steps (in priority order)
 
-1. **Test more models** (the still-open half of the old #1; growth to N=80 is done). One
-   model isn't a comparison — run several so reasoning-mode's 1.000 is shown to generalise, not
-   memorised. **Likely blocked by hardware**: only Qwen3-4B weights are local, 14B was abandoned
-   on VRAM. Options: smaller models that fit the 3090 (e.g. Qwen3-1.7B/0.6B as a weaker
-   contrast), or an API model as an upper bound. Decide the model set first.
-   - _Optional further growth:_ a third domain, or push N past 80 (CI lower bound is 0.954 now;
-     diminishing returns). Keep the discipline: balanced, disjoint, leakage-linted, author via
-     `grow.py` so test labels are never inspected.
-2. **Phase 5: a second *kind* of task** (e.g. brief-grounding) — only after #1. "Usefulness"
-   isn't a clean binary, so it needs an LLM-as-judge grader with its own leakage controls +
-   human spot-check. Scaffold lives at `benchmarks/triage_quality/`.
-3. **Decide reasoning for `brief`/`triage`** — measure it (via #2), don't guess.
-4. **Publish to Kaggle** — distribution step, gated behind #1 (grown + multi-model). Work:
-   solve the server-side import wall (vendor `shared/` into the task or attach repo as dataset),
-   carry over the leakage discipline, re-add the `kaggle` dev extra.
-5. **Ship decision** — when v2 is ready: PR `v2 → main`, tag `v0.2.0`, CHANGELOG, fold the v2
-   sections into README/ROADMAP as the current version.
+1. **Ship `v0.2.0`.** The doc rewrite is **done** (README version + Evaluation table, ROADMAP v2
+   section + deferred list, CHANGELOG `[0.2.0]`, and the external explainer's benchmark page).
+   Remaining, in order: commit the doc edits → `git push` v2 → open PR `v2 → main` → merge →
+   tag `v0.2.0` + push tag. (Optional cleanup: delete the stale `origin/v2-kaggle-benchmarks`.)
+2. **Publish the proven benchmark to Kaggle — the part to dive into next.** Decisions to make
+   *before* anything goes public:
+   - **How to publish without burning the held-out test.** A held-out set is only meaningful
+     while its answers are secret. A **Kaggle Community Benchmark** keeps the answer key
+     server-side and scores submissions (preferred); a plain **Dataset** would expose the test
+     and void future held-out use. Pick the format first — it drives everything else.
+   - **The server-side import wall.** Kaggle's runner can't `import shared`. Either vendor
+     `benchmarks/shared/` into the task notebook or attach the repo as a dataset.
+   - **Carry the discipline over:** frozen prompt + hash, baselines, no answer-bearing context,
+     the leakage linter. Re-add the `kaggle` dev extra (removed earlier).
+   - **Scope:** publish both proven tasks (`labels_plausibility`, `element_classification`).
+     Decide license/attribution (code is MIT).
+
+## Deferred — decided gold-plating (2026-06-14)
+
+The core claim (advisory LLM label check is trustworthy) is already defended. These wait until
+there's a concrete reason to reopen them — don't pursue without a fresh ask:
+- **More models.** Low marginal value: memorization is defended structurally, not by multi-model
+  runs, and the 0.8B "can't comply" contrast already exists. (A clean *scoring* contrast would
+  want a mid-tier model that complies but scores imperfectly — hardware-gated.)
+- **A second *kind* of task.** Calibration would validate the `confidence` field, but that field
+  is advisory-only in the product, so it hardens no claim a reviewer is asking about. The
+  LLM-as-judge variant imports a model-grading-model trust dependency. Scaffold stays at
+  `benchmarks/triage_quality/`.
+- **Further case growth** (third domain / N>80): diminishing returns; CI lower bound is 0.954.
 
 ## Small items
+- **`judge()` schema-in-prompt is brittle for tiny models** (found 2026-06-14 with 0.8B).
+  `_build_messages` injects the full `model_json_schema()` (nested `description`/`title`); very
+  small models parrot it instead of instantiating. A flattened/example-based schema would harden
+  the contract. NB: changing it bumps the frozen prompt hash, so it's a *protocol v-next*
+  re-freeze + re-run-both-models task, not a quiet edit. Doesn't affect the 4B results.
 - `.env` (stale Kaggle key) is gitignored but still on disk — Amandine chose to keep it.
 - `demo/` is untracked throwaway.
 - The `labels` check defaults to reasoning but both shipped datasets leave `label_rules` empty,

@@ -13,7 +13,7 @@ registry, so the check *engines* stay generic. The flagship is
 **[LeMaterial/LeMat-Bulk][lemat]** (DFT materials properties harmonized from Materials
 Project + OQMD + Alexandria); **NASA Meteorite Landings** is the proving ground.
 
-> Early but functional — `v0.1.0`. Built in public.
+> Early but functional — `v0.2.0`. Built in public.
 
 ### What it does
 
@@ -172,8 +172,9 @@ across all four configs (`compatible_pbe/pbesol/scan`, `non_compatible`).
 
 ## Roadmap
 
-Everything through **`v0.1.0` is ✅ done** — including the live local-LLM runs
-(`brief`, `triage`, label judging) against a real vLLM server.
+Everything through **`v0.2.0` is ✅ done** — the `v0.1.0` core (checks, report, live local-LLM
+runs against a real vLLM server) plus the v2 leakage-safe evaluation layer and readiness rubric.
+The next step is **publishing the proven benchmark to Kaggle**.
 
 ```mermaid
 flowchart TB
@@ -189,12 +190,12 @@ flowchart TB
         direction LR
         P4["Phase 4<br/>HTML triage report"] --> P5["Phase 5<br/>Package, CLI &amp; docs"]
     end
-    F --> G --> S --> REL(["v0.1.0 · current release"]) --> N["What's next<br/>config-file rules · fuzzy near-dup<br/>PII escalation · Streamlit UI"]
+    F --> G --> S --> EV["v2<br/>Leakage-safe eval + readiness rubric"] --> REL(["v0.2.0 · current release"]) --> N["What's next<br/>publish benchmark to Kaggle<br/>config-file rules · Streamlit UI"]
 
     classDef done fill:#e6f4ea,stroke:#34a853,color:#0d652d;
     classDef rel fill:#fef7e0,stroke:#f9ab00,color:#b06000;
     classDef next fill:#f1f3f4,stroke:#9aa0a6,color:#3c4043,stroke-dasharray:5 4;
-    class P0,P1,P2,P25,P3,P4,P5 done
+    class P0,P1,P2,P25,P3,P4,P5,EV done
     class REL rel
     class N next
 ```
@@ -209,6 +210,8 @@ flowchart TB
 | 4 | HTML report (Triage layout: rail, summary strip, expandable issues) | ✅ Done |
 | 5 | Package + CLI (`auditor run`), docs | ✅ Done |
 | D | Live local-LLM runs (`brief`, `triage`, label judging) | ✅ Done |
+| v2 | Leakage-safe evaluation (2 tasks, N=80 held-out) + readiness rubric | ✅ Done |
+| next | Publish the proven benchmark to Kaggle | ⏳ Next |
 
 ### Phase 3 in detail
 
@@ -224,8 +227,10 @@ check is a **generic engine** configured by a `DatasetSpec`. Done:
 3. **`near_dup.py`** — *same content, different identity = a probable duplicate.* On
    LeMat this **fires on real data**: 240 rows where one `entalpic_fingerprint` spans
    multiple `immutable_id`s (a structure ingested from several source DBs).
-4. **`pii.py`** — regex tier (email/SSN/card/phone/IP) with masked evidence; scans
-   only declared text columns. Fixture-demonstrated (no PII in the flagships).
+4. **`pii.py`** — regex tier (email/SSN/card/phone/IP) with masked evidence. **Always
+   runs**: declared text columns get every detector; with none declared it auto-detects
+   text columns and scans them for the rigid identifiers (email, SSN) only. Clean on both
+   flagships.
 5. **`labels.py`** — LLM-judged categorical plausibility, the first consumer of
    `auditor.llm`. Samples, degrades gracefully, fixture-demonstrated.
 
@@ -356,9 +361,26 @@ pulling in pandas, httpx, jinja2, or torch. Install only what you need.
 The deterministic checks are facts (covered by `pytest`); the only fallible part is the
 advisory LLM's judgement. That is measured under a **leakage-safe** protocol — see
 [`EVAL_PROTOCOL.md`](EVAL_PROTOCOL.md) (the rules), [`docs/methodology.md`](docs/methodology.md)
-(the reasoning), and [`benchmarks/`](benchmarks/) (the one task today, `label-plausibility`,
-with disjoint dev/calibration/hidden splits, a frozen prompt, an automated leakage linter,
-and held-out-only reporting). The harness is pure and model-free, so CI needs no model.
+(the reasoning), and [`benchmarks/`](benchmarks/) (the tasks). Each task has disjoint
+dev/calibration/held-out splits, balanced classes, a frozen prompt locked by hash, an automated
+leakage linter, a value↔label decorrelation guard, and held-out-only reporting with confidence
+intervals and dumb baselines a real model must beat. The harness is pure and model-free, so CI
+needs no model.
+
+Two tasks ship today, both reusing the product's own `build_label_prompt` / `LabelVerdict` with
+**no answer-bearing context**:
+
+| Task | What it asks | Held-out (Qwen3-4B, reasoning) |
+|---|---|---|
+| `labels_plausibility` | is a phase-at-STP label plausible? | **1.000**, N=80, 95% CI [0.954, 1.000], F1 1.000 |
+| `element_classification` | metal / nonmetal / metalloid plausible? | **1.000**, N=80, 95% CI [0.954, 1.000], F1 1.000 |
+
+Both beat the vocabulary-floor and majority-class baselines (0.500). The result is **reasoning
+mode's doing**: the strict forced-JSON path scored at the floor (0.500) until the small model was
+let to think first. A much smaller model (Qwen3.5-0.8B) sits *below* the harness's structured-output
+floor — it can't emit a valid verdict under the frozen prompt — so the 1.000 is not reproducible by
+just any model. The readiness rubric (above) rolls the deterministic findings into per-dimension
+scores; LLM labels stay advisory and never move it.
 
 ## License
 
