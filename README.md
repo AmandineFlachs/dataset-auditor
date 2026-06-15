@@ -174,7 +174,8 @@ across all four configs (`compatible_pbe/pbesol/scan`, `non_compatible`).
 
 Everything through **`v0.2.0` is ✅ done** — the `v0.1.0` core (checks, report, live local-LLM
 runs against a real vLLM server) plus the v2 leakage-safe evaluation layer and readiness rubric.
-The next step is **publishing the proven benchmark to Kaggle**.
+The benchmark is now **published on Kaggle** as a public, cross-model leaderboard (see
+[`kaggle/`](kaggle/) and [Evaluation](#evaluation)).
 
 ```mermaid
 flowchart TB
@@ -190,12 +191,12 @@ flowchart TB
         direction LR
         P4["Phase 4<br/>HTML triage report"] --> P5["Phase 5<br/>Package, CLI &amp; docs"]
     end
-    F --> G --> S --> EV["v2<br/>Leakage-safe eval + readiness rubric"] --> REL(["v0.2.0 · current release"]) --> N["What's next<br/>publish benchmark to Kaggle<br/>config-file rules · Streamlit UI"]
+    F --> G --> S --> EV["v2<br/>Leakage-safe eval + readiness rubric"] --> REL(["v0.2.0 · current release"]) --> KAG["Published to Kaggle<br/>4 tasks · cross-model leaderboard"] --> N["What's next<br/>config-file rules · Streamlit UI"]
 
     classDef done fill:#e6f4ea,stroke:#34a853,color:#0d652d;
     classDef rel fill:#fef7e0,stroke:#f9ab00,color:#b06000;
     classDef next fill:#f1f3f4,stroke:#9aa0a6,color:#3c4043,stroke-dasharray:5 4;
-    class P0,P1,P2,P25,P3,P4,P5,EV done
+    class P0,P1,P2,P25,P3,P4,P5,EV,KAG done
     class REL rel
     class N next
 ```
@@ -211,7 +212,8 @@ flowchart TB
 | 5 | Package + CLI (`auditor run`), docs | ✅ Done |
 | D | Live local-LLM runs (`brief`, `triage`, label judging) | ✅ Done |
 | v2 | Leakage-safe evaluation (2 tasks, N=80 held-out) + readiness rubric | ✅ Done |
-| next | Publish the proven benchmark to Kaggle | ⏳ Next |
+| Kaggle | Publish the benchmark (4 tasks, open + fresh-private, cross-model leaderboard) | ✅ Done |
+| next | Config-file rules · Streamlit UI | ⏳ Next |
 
 ### Phase 3 in detail
 
@@ -381,6 +383,27 @@ let to think first. A much smaller model (Qwen3.5-0.8B) sits *below* the harness
 floor — it can't emit a valid verdict under the frozen prompt — so the 1.000 is not reproducible by
 just any model. The readiness rubric (above) rolls the deterministic findings into per-dimension
 scores; LLM labels stay advisory and never move it.
+
+### On Kaggle: a public cross-model leaderboard
+
+The same benchmark is **published on [Kaggle Benchmarks](https://www.kaggle.com/benchmarks)** so
+frontier models can be compared on it directly — see [`kaggle/`](kaggle/). Each domain ships as an
+**open** set (the public cases above — reproducible, but a model may have seen them) and a
+**fresh-private** set (newly minted, never published, so a score can't be dismissed as
+memorisation). Scoring stays exact-match; each task returns `(accuracy, 95% CI)`.
+
+| Model | Phase-STP open | Phase-STP private | Element open | Element private |
+|---|---|---|---|---|
+| Claude Haiku 4.5 | 1.000 | 1.000 | 1.000 | 1.000 |
+| Gemini 3 Flash | 0.963 | 1.000 | 0.963 | 0.900 |
+| Qwen3-Next-80B **Thinking** | **1.000** | — | — | — |
+| Qwen3-Next-80B **Instruct** | **0.513** | **0.500** | 0.688 | 0.763 |
+
+*(N=80 each; DeepSeek V3.2 was unavailable via the Model Proxy; the Qwen Thinking variant completed
+only one task — long-reasoning calls exceeded the proxy limit.)* The headline: the same 80B model
+scores **1.000 Thinking vs 0.513 Instruct** on phase-plausibility — the reasoning thesis, live
+across vendors. The benchmark discriminates (not everyone passes), and the fresh-private numbers
+track the open ones, so contamination isn't inflating the public scores.
 
 ## License
 

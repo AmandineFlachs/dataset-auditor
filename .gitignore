@@ -11,6 +11,7 @@ venv/
 
 # Benchmark run artifacts (local-validation output, gitignored manifests)
 *.run.json
+*.task.json
 results/
 
 # Data caches (Hugging Face / local downloads)
@@ -38,3 +39,10 @@ docs/social/
 
 # scratch outputs of benchmarks/_grow/grow.py (regenerable)
 benchmarks/_grow/*_candidates.jsonl
+
+# Fresh PRIVATE Kaggle held-out set — must NEVER be committed/published, or it stops
+# being a contamination-free hold-out. Generator + emitted task files live here.
+kaggle/private/
+
+# Throwaway venv for Kaggle SDK exploration
+.kaggle-scratch-venv/

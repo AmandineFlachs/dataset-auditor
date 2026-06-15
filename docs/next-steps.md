@@ -1,11 +1,13 @@
 # Next steps — dataset-auditor
 
-_Updated 2026-06-14. Active branch: **`v2`**. `main` = v1, untouched. **Decision locked: ship +
-publish what's proven; defer more eval depth** (see Deferred). Pick up at step #1 (ship `v0.2.0`),
-then step #2 (publish to Kaggle — the part to dive into next)._
+_Updated 2026-06-15. Active branch: **`v2`**. `main` = v1, untouched. `v0.2.0` is shipped, and the
+benchmark is now **published on Kaggle** (4 tasks, open + fresh-private, public cross-model
+leaderboard). Pick up at step #1 (commit the `kaggle/` work)._
 
-> **Unpushed:** v2 is ahead of origin and has uncommitted doc edits (the `v0.2.0` README / ROADMAP
-> / CHANGELOG rewrite). Commit + `git push` v2, then do the ship steps below.
+> **Uncommitted:** v2 has the new `kaggle/` directory (public task files + generator + adapter +
+> README) plus doc edits (README / ROADMAP / next-steps / explainer leaderboard). The
+> fresh-private set, its generator, `.env`, and `*.task.json`/run artifacts are gitignored and must
+> stay that way. Commit the public `kaggle/` files + docs, then `git push` v2.
 
 ## Where things stand (v2 branch)
 
@@ -45,24 +47,28 @@ Run a benchmark: `python benchmarks/run.py --task <labels_plausibility|element_c
 Needs the local vLLM up; if a call is slow, restart vLLM with a lower `--gpu-memory-utilization`
 (VRAM paging) — that took a call from 149s to 8s.
 
+## Done since last update (2026-06-15)
+
+- **`v0.2.0` shipped** (merged to `main`, tagged).
+- **Benchmark published to Kaggle** — 4 tasks (`labels-plausibility` + `element-classification`,
+  each *open* and *fresh-private*), public cross-model leaderboard. Built with
+  `kaggle/build_open_tasks.py` (open) + `kaggle/private/build_private_tasks.py` (private,
+  gitignored), validated locally via `kaggle/run_local.py` + `kaggle/local_adapter.py`. See
+  [`kaggle/README.md`](../kaggle/README.md). Key findings: Claude Haiku 4.5 = 1.000 across all
+  four; Qwen3-Next-80B **Thinking 1.000 vs Instruct 0.513** on phase (reasoning thesis, live);
+  private tracks open (no contamination inflation). DeepSeek V3.2 unavailable via proxy; Qwen
+  Thinking completed 1/4 (long-reasoning calls exceeded the proxy per-call limit).
+
 ## Next steps (in priority order)
 
-1. **Ship `v0.2.0`.** The doc rewrite is **done** (README version + Evaluation table, ROADMAP v2
-   section + deferred list, CHANGELOG `[0.2.0]`, and the external explainer's benchmark page).
-   Remaining, in order: commit the doc edits → `git push` v2 → open PR `v2 → main` → merge →
-   tag `v0.2.0` + push tag. (Optional cleanup: delete the stale `origin/v2-kaggle-benchmarks`.)
-2. **Publish the proven benchmark to Kaggle — the part to dive into next.** Decisions to make
-   *before* anything goes public:
-   - **How to publish without burning the held-out test.** A held-out set is only meaningful
-     while its answers are secret. A **Kaggle Community Benchmark** keeps the answer key
-     server-side and scores submissions (preferred); a plain **Dataset** would expose the test
-     and void future held-out use. Pick the format first — it drives everything else.
-   - **The server-side import wall.** Kaggle's runner can't `import shared`. Either vendor
-     `benchmarks/shared/` into the task notebook or attach the repo as a dataset.
-   - **Carry the discipline over:** frozen prompt + hash, baselines, no answer-bearing context,
-     the leakage linter. Re-add the `kaggle` dev extra (removed earlier).
-   - **Scope:** publish both proven tasks (`labels_plausibility`, `element_classification`).
-     Decide license/attribution (code is MIT).
+1. **Commit + push the `kaggle/` work.** Stage the public files only — verify
+   `git status` shows no `private/`, `.env`, `*.task.json`, or `*.run.json`. Then `git push` v2.
+2. **(Optional) Fill out the leaderboard.** Add more models (Opus 4.8, GPT-5.5, Gemini 3.5 Flash
+   are in the catalog); retry DeepSeek later (proxy-side error today). To make Qwen-Thinking
+   complete reliably, the task's per-case calls would need failure tolerance — a methodology
+   change, so decide deliberately.
+3. **(Optional) Community/visibility.** The leaderboards are public; link them from the explainer
+   and anywhere the project is showcased.
 
 ## Deferred — decided gold-plating (2026-06-14)
 
