@@ -112,11 +112,22 @@ def majority_class():
     return [(maj, c["expected"]) for c in CASES]
 
 
-def _score_all(llm, max_workers: int = 8):
+def _score_all(llm, max_workers: int = 2):
     """Score every held-out case for one model and return (score_dict, preds).
 
-    Calls run CONCURRENTLY (a thread pool) so a single task run stays fast even with
-    reasoning="high" over 80 cases. preds is a list of (predicted, expected) pairs.
+    Calls run concurrently (a small thread pool). preds is a list of (predicted, expected) pairs.
+
+    No max-output-tokens cap: reasoning="high" sets a large server-side thinking budget, and
+    a cap below it makes Anthropic models 400 ("max_tokens must be > thinking.budget_tokens")
+    and truncates thinking models into a null response. Uncapped is the configuration that
+    reproduced the validated results (Claude Haiku 1.000; the qwen thinking-vs-instruct
+    contrast).
+
+    max_workers is deliberately small: uncapped, each call reserves the full context window
+    (~$0.31-0.42 of estimated cost for the heavy reasoning models), and the Model Proxy 403s
+    when the PEAK simultaneous reservation (max_workers * per-call cost) exceeds the available
+    quota. Few workers keeps the peak low so a single run fits a depleted-credit day; the cost
+    is a slower run. This is purely an execution knob, not a benchmark parameter.
     """
     def _judge(c):
         reply = llm.prompt(c["prompt"], reasoning="high")
