@@ -394,16 +394,23 @@ memorisation). Scoring stays exact-match; each task returns `(accuracy, 95% CI)`
 
 | Model | Phase-STP open | Phase-STP private | Element open | Element private |
 |---|---|---|---|---|
-| Claude Haiku 4.5 | 1.000 | 1.000 | 1.000 | 1.000 |
-| Gemini 3 Flash | 0.963 | 1.000 | 0.963 | 0.900 |
-| Qwen3-Next-80B **Thinking** | **1.000** | — | — | — |
-| Qwen3-Next-80B **Instruct** | **0.513** | **0.500** | 0.688 | 0.763 |
+| Claude Haiku 4.5 | 0.988 | 0.988 | 1.000 | 1.000 |
+| Gemini 3 Flash | 1.000 | 0.975 | 0.975 | 0.938 |
+| Gemini 3.1 Flash-Lite | 1.000 | 1.000 | 0.988 | 0.988 |
+| GLM-5 | 1.000 | 1.000 | 0.975 | 0.975 |
+| Qwen3-Next-80B **Thinking** | **1.000** | † | † | † |
+| Qwen3-Next-80B **Instruct** | **0.513** | **0.513** | 0.675 | 0.763 |
 
-*(N=80 each; DeepSeek V3.2 was unavailable via the Model Proxy; the Qwen Thinking variant completed
-only one task — long-reasoning calls exceeded the proxy limit.)* The headline: the same 80B model
-scores **1.000 Thinking vs 0.513 Instruct** on phase-plausibility — the reasoning thesis, live
-across vendors. The benchmark discriminates (not everyone passes), and the fresh-private numbers
-track the open ones, so contamination isn't inflating the public scores.
+*(N=80 each; accuracy with 95% Wilson CI half-width ≈ ±0.023 at 1.000. † Thinking completed
+phase-open then hit the Model Proxy's per-call quota wall — each uncapped reasoning call reserves
+~$0.31, which exceeded the day's remaining credit; the other three cells need a fresh credit window
+(a cap can't lower it without breaking reasoning mode). DeepSeek V3.2 and gpt-oss-120b errored on
+transient provider load (429/503) — not a property of the benchmark.)* The
+headline: the **same** 80B model scores **1.000 Thinking vs 0.513 Instruct** on phase-plausibility —
+the reasoning thesis, live across vendors. Four frontier models cluster near-perfect while
+Qwen-Instruct sits at/near the 0.50 floor on phase, so the benchmark **discriminates** (not everyone
+passes); and each model's fresh-private number tracks its open one, so contamination isn't inflating
+the public scores.
 
 ## License
 

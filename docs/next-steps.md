@@ -8,30 +8,35 @@ leaderboard). Pick up at step #1 (commit the `kaggle/` work)._
 > fresh-private set, its generator, `.env`, and `*.task.json`/run artifacts stay gitignored. Only
 > this next-steps refresh is uncommitted. The four leaderboards are **public** on Kaggle.
 
-## DO THIS FIRST (2026-06-17+): fill the cross-model board in one paced pass
+## BOARD STATUS (2026-06-17): five models complete, headline proven, one cell-set left
 
-Today (2026-06-16) we hit a **hard daily-credit wall**: uncapped `reasoning="high"` calls reserve
-~$0.31-0.42 EACH (full context window), and the day's free credit dropped below a single call's
-reservation, so every heavy model (Haiku on 3/4, both qwen, glm-5) 403'd. Lowering concurrency does
-NOT help — the binding limit is per-call reservation vs available quota, not peak parallelism. A cap
-does not help either: `reasoning="high"` sets a server-side thinking budget >24576, so any cap that
-shrinks the reservation also makes Anthropic models 400 and truncates thinking models (null
-response). So the tasks are **uncapped** (the validated config) and the only missing ingredient is
-credit, which returns at the reset. Nothing needs re-pushing — the four tasks are on their final
-config (uncapped, `max_workers=2`).
+On 2026-06-17, under fresh credit, we paced a careful gap-only fill and got a strong board. **Five
+models complete 4/4**: Claude Haiku 4.5, Gemini 3 Flash, Gemini 3.1 Flash-Lite, GLM-5, and
+Qwen3-Next-80B **Instruct**. The **headline reasoning contrast is captured live**: on phase-open,
+same 80B model, **Thinking 1.000 vs Instruct 0.513**. Tables in `README.md`, `kaggle/README.md`, and
+`../project-explainer.html` are refreshed to this board.
 
-When credit has reset:
-1. **Re-auth** (OAuth lapses overnight): `! ../.kaggle-scratch-venv/Scripts/kaggle.exe auth login`.
-2. **Run** `bash kaggle/private/fill_board.sh` — refreshes the proxy key, then a PACED,
-   headline-first sweep (one model across the four tasks per batch, waiting for each to settle so
-   reservations stay small), retries the transient (429/503) models once, and prints the final board
-   via `kaggle/private/_parse_lb_full.py`. ~30-60 min, unattended. (Both scripts are gitignored.)
-3. **Refresh tables** in `README.md` + `../project-explainer.html` from the printed board.
+**The only gap:** Qwen3-Next-80B **Thinking** on its other three tasks (phase-private, element-open,
+element-private). Thinking landed phase-open while credit was fullest, then the remaining three
+**403'd on the per-call quota wall** ($0.31 uncapped reservation > day's remaining credit). The
+headline doesn't need them (it's same-task, apples-to-apples on phase-open), but they'd add breadth.
 
-Caveats: gpt-oss-120b (503) and deepseek-v3.2 (429) have been down on transient provider errors all
-day — those cells may stay empty (not our bug). If reservations still 403 at full morning credit,
-the reset cadence is longer than daily — wait accordingly. Re-pushing resets the version-scoped
-leaderboard, so do NOT push unless the task code itself changes.
+**NEXT RESET — fill the 3 Thinking cells FIRST (lesson learned):** the single most expensive model
+must run *first*, while credit is fullest — don't spend the morning's credit on the cheap models and
+leave Thinking for last (that's what stranded these three). Procedure:
+1. **Refresh auth** (token lapses overnight): just run a free call —
+   `../.kaggle-scratch-venv/Scripts/kaggle.exe benchmarks tasks list`. It auto-refreshes the OAuth
+   token via the stored refresh_token. Do NOT fight `auth login` (no browser opens here).
+2. Refresh the proxy key (`benchmarks init -y`), export `KAGGLE_API_TOKEN` from the access_token.
+3. Run **qwen-thinking** on the 3 gap tasks ONE AT A TIME, settling between each (each is a ~12-min
+   long-reasoning sweep). Then download + `python kaggle/private/_parse_lb_full.py`.
+4. Swap the three `†` cells in the three tables for the real numbers.
+
+Background (still true): the tasks are **uncapped** `reasoning="high"` (validated config) on
+`max_workers=2`; a cap can't lower the reservation without 400ing Anthropic / truncating thinking
+models (server thinking budget >24576). Re-pushing resets the version-scoped leaderboard, so do NOT
+push unless the task code changes. DeepSeek V3.2 (429) and gpt-oss-120b (503) error on transient
+provider load on every attempt — likely stay empty; not our bug.
 
 ## Where things stand (v2 branch)
 

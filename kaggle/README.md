@@ -28,11 +28,20 @@ so the answer key stays server-side). A score on the private set cannot be dismi
 
 | Model | Phase-STP open | Phase-STP private | Element open | Element private |
 |---|---|---|---|---|
-| Claude Haiku 4.5 | 1.000 | 1.000 | 1.000 | 1.000 |
-| Gemini 3 Flash | 0.963 | 1.000 | 0.963 | 0.900 |
-| Qwen3-Next-80B **Thinking** | **1.000** | — | — | — |
-| Qwen3-Next-80B **Instruct** | **0.513** | **0.500** | 0.688 | 0.763 |
-| DeepSeek V3.2 | n/a | n/a | n/a | n/a |
+| Claude Haiku 4.5 | 0.988 | 0.988 | 1.000 | 1.000 |
+| Gemini 3 Flash | 1.000 | 0.975 | 0.975 | 0.938 |
+| Gemini 3.1 Flash-Lite | 1.000 | 1.000 | 0.988 | 0.988 |
+| GLM-5 | 1.000 | 1.000 | 0.975 | 0.975 |
+| Qwen3-Next-80B **Thinking** | **1.000** | † | † | † |
+| Qwen3-Next-80B **Instruct** | **0.513** | **0.513** | 0.675 | 0.763 |
+| DeepSeek V3.2 / gpt-oss-120b | errored | errored | errored | errored |
+
+† Thinking completed phase-open (the headline cell) then hit the per-call quota wall: each uncapped
+`reasoning="high"` call reserves ~$0.31, which exceeded the day's remaining credit after the other
+five models ran. A `max_tokens` cap would lower the reservation but `reasoning="high"` sets a
+server-side thinking budget >24576, so any cap below it 400s Anthropic models and truncates thinking
+models — uncapped is the only valid config. The three cells need a fresh credit window, not a code
+change.
 
 *Local reference:* Qwen3-4B in reasoning mode scores **1.000** on both domains (see
 [`benchmarks/`](../benchmarks/)). *Deterministic floor:* the vocabulary and majority-class baselines
@@ -42,10 +51,10 @@ knowledge.
 **Headline.** Same 80B model: the **Thinking** variant scores 1.000 on phase-plausibility, the
 **Instruct** (non-reasoning) variant 0.513 — at the random-guess floor. That is the project's
 "reasoning beats forced/terse output" thesis, reproduced across vendors on Kaggle's infrastructure.
-The benchmark *discriminates* (not everyone passes), and the fresh-private numbers track the open
-ones (no contamination inflation). DeepSeek V3.2 was unavailable through the Model Proxy; the
-Qwen Thinking variant completed only one task (a few of its long reasoning calls exceeded the
-proxy's per-call limit) — neither is a property of the benchmark.
+The benchmark *discriminates* (four frontier models cluster near-perfect, Qwen-Instruct sits at the
+floor on phase), and each model's fresh-private number tracks its open one (no contamination
+inflation). DeepSeek V3.2 and gpt-oss-120b errored on transient provider load (429 heavy-load /
+503 unreachable) on every attempt — a provider state, not a property of the benchmark.
 
 ## Design (per task file)
 
