@@ -26,6 +26,10 @@ data/
 # outputs at the repo root while keeping the curated examples/ copies tracked.
 /briefing*.md
 
+# Personal at-a-glance status view for the status line / project-status skill.
+# Overlaps ROADMAP.md + CHANGELOG.md (the tracked sources of truth); kept local-only.
+/TASKS.md
+
 # Social / marketing assets — kept in-repo for convenience but not part of the
 # published project (rendered card + crops live here, regenerated from explainer.html).
 docs/social/
