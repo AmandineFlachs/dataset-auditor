@@ -1,0 +1,1103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dataset-auditor — how it works</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#1f2430; --muted:#5b6472; --line:#e4e7ec;
+    --brand:#2f6fed; --brand-soft:#eaf1fe;
+    --error:#d64545; --error-soft:#fbe9e9;
+    --warn:#c6841a; --warn-soft:#fdf3e2;
+    --info:#2f6fed; --info-soft:#eaf1fe;
+    --good:#2f9e6f; --good-soft:#e6f6ee;
+    --radius:14px; --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.1);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55; font-size:16px;
+  }
+  header.top{
+    position:sticky; top:0; z-index:10; background:rgba(255,255,255,.9);
+    backdrop-filter:saturate(180%) blur(8px); border-bottom:1px solid var(--line);
+  }
+  .top-inner{max-width:1040px; margin:0 auto; padding:14px 22px; display:flex; align-items:center; gap:16px; flex-wrap:wrap}
+  .logo{font-weight:700; font-size:17px; letter-spacing:-.2px; display:flex; align-items:center; gap:9px}
+  .logo .dot{width:11px;height:11px;border-radius:3px;background:var(--brand);display:inline-block}
+  nav.tabs{display:flex; gap:6px; margin-left:auto; flex-wrap:wrap}
+  nav.tabs button{
+    font:inherit; font-size:14px; font-weight:600; color:var(--muted);
+    background:transparent; border:1px solid transparent; padding:8px 13px; border-radius:9px; cursor:pointer;
+  }
+  nav.tabs button:hover{color:var(--ink); background:var(--bg)}
+  nav.tabs button.active{color:var(--brand); background:var(--brand-soft); border-color:#d7e3fb}
+  main{max-width:1040px; margin:0 auto; padding:30px 22px 80px}
+  .page{display:none; animation:fade .25s ease}
+  .page.active{display:block}
+  @keyframes fade{from{opacity:0; transform:translateY(4px)}to{opacity:1; transform:none}}
+  h1{font-size:30px; letter-spacing:-.5px; margin:.2em 0 .15em}
+  h2{font-size:21px; letter-spacing:-.3px; margin:1.7em 0 .6em; padding-bottom:.3em; border-bottom:1px solid var(--line)}
+  h3{font-size:16px; margin:1.3em 0 .4em}
+  p{margin:.6em 0}
+  .lede{font-size:18px; color:var(--muted); max-width:70ch}
+  .muted{color:var(--muted)}
+  code{background:#eef0f3; padding:.12em .4em; border-radius:5px; font-size:.86em;
+       font-family:"SF Mono",ui-monospace,"Cascadia Code",Consolas,monospace}
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:20px 22px; margin:16px 0}
+  .grid{display:grid; gap:16px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  @media(max-width:760px){.g2,.g3{grid-template-columns:1fr}}
+  .pill{display:inline-block; font-size:12px; font-weight:700; padding:3px 9px; border-radius:999px; letter-spacing:.2px}
+  .pill.error{background:var(--error-soft); color:var(--error)}
+  .pill.warn{background:var(--warn-soft); color:var(--warn)}
+  .pill.info{background:var(--info-soft); color:var(--info)}
+  .pill.good{background:var(--good-soft); color:var(--good)}
+  .pill.brand{background:var(--brand-soft); color:var(--brand)}
+  .callout{border-left:4px solid var(--brand); background:var(--brand-soft); padding:12px 16px; border-radius:0 10px 10px 0; margin:16px 0}
+  .callout.good{border-color:var(--good); background:var(--good-soft)}
+  .callout.warn{border-color:var(--warn); background:var(--warn-soft)}
+  .callout.error{border-color:var(--error); background:var(--error-soft)}
+  table{border-collapse:collapse; width:100%; font-size:14.5px; margin:10px 0}
+  th,td{text-align:left; padding:9px 11px; border-bottom:1px solid var(--line)}
+  th{font-size:12.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  td.num{font-variant-numeric:tabular-nums; text-align:right; font-weight:600}
+  .key{font-family:"SF Mono",ui-monospace,Consolas,monospace; font-size:13px}
+  /* bar chart */
+  .bars{display:flex; flex-direction:column; gap:10px; margin:14px 0}
+  .bar-row{display:grid; grid-template-columns:170px 1fr 64px; align-items:center; gap:12px}
+  .bar-label{font-size:13.5px; color:var(--ink)}
+  .bar-track{background:#eef0f3; border-radius:7px; height:24px; overflow:hidden}
+  .bar-fill{height:100%; border-radius:7px; display:flex; align-items:center}
+  .bar-val{font-variant-numeric:tabular-nums; font-weight:700; font-size:14px; text-align:right}
+  @media(max-width:600px){.bar-row{grid-template-columns:120px 1fr 50px}}
+  .step{display:flex; gap:14px; align-items:flex-start; margin:14px 0}
+  .step .n{flex:0 0 28px; height:28px; border-radius:50%; background:var(--brand); color:#fff; font-weight:700; font-size:14px; display:flex; align-items:center; justify-content:center}
+  .chip{display:inline-block; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:13px; margin:3px 4px 3px 0}
+  .ex{background:#0f1422; color:#d7dbe6; border-radius:12px; padding:16px 18px; font-family:"SF Mono",ui-monospace,Consolas,monospace; font-size:13px; overflow:auto; margin:12px 0; line-height:1.6}
+  .ex .k{color:#8fb6ff} .ex .s{color:#9fe0b0} .ex .w{color:#f3c97a} .ex .e{color:#ff9b9b} .ex .c{color:#7b8499}
+  figure{margin:18px 0; text-align:center}
+  figcaption{font-size:13px; color:var(--muted); margin-top:8px}
+  svg{max-width:100%; height:auto}
+  .toc{display:flex; gap:10px; flex-wrap:wrap; margin-top:18px}
+  .toc a{text-decoration:none; color:var(--brand); font-weight:600; font-size:14px; border:1px solid #d7e3fb; background:var(--brand-soft); padding:8px 14px; border-radius:10px}
+  .footer{color:var(--muted); font-size:13px; text-align:center; padding-top:30px}
+  ul.tight li{margin:.25em 0}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="logo"><span class="dot"></span> dataset-auditor</div>
+    <nav class="tabs" id="tabs">
+      <button data-go="overview" class="active">Overview</button>
+      <button data-go="checks">The Checks</button>
+      <button data-go="benchmark">Benchmark &amp; rubric</button>
+      <button data-go="analysis">Kaggle &amp; deep dive</button>
+      <button data-go="glossary">Plain-words glossary</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<!-- ====================== OVERVIEW ====================== -->
+<section class="page active" id="overview">
+  <h1>What this project is</h1>
+  <p class="lede">You point the tool at a table of scientific data. It returns a single web-page
+  report that flags likely errors: missing values, out-of-range numbers, duplicates, personal
+  information, mislabeled categories. It runs entirely on your own machine, and is free.</p>
+
+  <div class="callout">
+    <strong>The one-sentence version.</strong> A trustworthy core written in plain Python finds the
+    problems and states them as facts; a local AI sits alongside it in a strictly advisory role, to
+    help a human read and prioritise those facts. The AI never overrides a fact.
+  </div>
+
+  <div style="margin:16px 0 4px">
+    <span class="chip">open source</span>
+    <span class="chip">v0.2.0</span>
+    <span class="chip">Python · pandas</span>
+    <span class="chip">local LLM · vLLM (Qwen3-4B)</span>
+    <span class="chip">Kaggle Benchmarks</span>
+  </div>
+
+  <h2>What it produces</h2>
+  <p>A single, self-contained HTML report: a triage dashboard that scores the dataset, groups every
+  issue by type, and lets a human keep, dismiss, or flag each finding. Below is a real run on a
+  25,000-row <a href="https://huggingface.co/datasets/LeMaterial/LeMat-Bulk">LeMat-Bulk</a> sample.</p>
+  <figure>
+    <img src="images/report-overview.png" alt="dataset-auditor triage report on LeMat-Bulk: 368 issues found, 98.5% of rows clean, findings grouped by category" style="width:100%;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)">
+    <figcaption>The report overview: a readiness score (98.5% of rows clean), triage counts (126 need fixing, 242 worth a look), and every issue grouped by category. Findings are actionable and reviewable, never a black-box verdict.</figcaption>
+  </figure>
+
+  <h2>The arc: from a tool to a tested, published benchmark</h2>
+  <p>One coherent line of work in three releases, each hardening the last: a working auditor, then a
+  leakage-safe way to prove its one AI-powered check is trustworthy, then that proof made public and
+  cross-vendor on Kaggle.</p>
+  <figure>
+    <svg viewBox="0 0 920 196" role="img" aria-label="Project timeline from v0.1.0 to v0.2.0 to Kaggle">
+      <line x1="100" y1="58" x2="820" y2="58" stroke="#cfd5df" stroke-width="2"></line>
+      <circle cx="170" cy="58" r="9" fill="#2f6fed"></circle>
+      <text x="170" y="34" text-anchor="middle" font-size="13" font-weight="700" fill="#2f6fed">v0.1.0</text>
+      <rect x="44" y="78" width="252" height="98" rx="10" fill="#fff" stroke="#e4e7ec"></rect>
+      <text x="60" y="102" font-size="13.5" font-weight="700" fill="#1f2430">The auditor</text>
+      <text x="60" y="123" font-size="11.5" fill="#5b6472">8 deterministic checks plus an</text>
+      <text x="60" y="139" font-size="11.5" fill="#5b6472">advisory local LLM, one HTML</text>
+      <text x="60" y="155" font-size="11.5" fill="#5b6472">triage report, two real datasets.</text>
+      <circle cx="460" cy="58" r="9" fill="#2f6fed"></circle>
+      <text x="460" y="34" text-anchor="middle" font-size="13" font-weight="700" fill="#2f6fed">v0.2.0</text>
+      <rect x="334" y="78" width="252" height="98" rx="10" fill="#fff" stroke="#e4e7ec"></rect>
+      <text x="350" y="102" font-size="13.5" font-weight="700" fill="#1f2430">Leakage-safe evaluation</text>
+      <text x="350" y="123" font-size="11.5" fill="#5b6472">Held-out benchmark and readiness</text>
+      <text x="350" y="139" font-size="11.5" fill="#5b6472">rubric: frozen prompt, baselines,</text>
+      <text x="350" y="155" font-size="11.5" fill="#5b6472">confidence intervals.</text>
+      <circle cx="750" cy="58" r="9" fill="#2f9e6f"></circle>
+      <text x="750" y="34" text-anchor="middle" font-size="13" font-weight="700" fill="#2f9e6f">Kaggle</text>
+      <rect x="624" y="78" width="252" height="98" rx="10" fill="#eaf1fe" stroke="#d7e3fb"></rect>
+      <text x="640" y="102" font-size="13.5" font-weight="700" fill="#1f2430">Public cross-model benchmark</text>
+      <text x="640" y="123" font-size="11.5" fill="#5b6472">Four tasks, six frontier models,</text>
+      <text x="640" y="139" font-size="11.5" fill="#5b6472">the reasoning thesis proven</text>
+      <text x="640" y="155" font-size="11.5" fill="#5b6472">live across vendors.</text>
+    </svg>
+    <figcaption>Three releases, one thesis: data quality you can defend, and an AI check you can prove.</figcaption>
+  </figure>
+
+  <h2>The high-level objectives</h2>
+  <div class="grid g2">
+    <div class="panel">
+      <span class="pill brand">Goal 1</span>
+      <h3>Find real data problems you can defend</h3>
+      <p>Scientific datasets contain errors. The tool surfaces each as a concrete, checkable finding
+      that records what it found, how serious it is, and what the value <em>should</em> have been.</p>
+    </div>
+    <div class="panel">
+      <span class="pill brand">Goal 2</span>
+      <h3>Keep the facts separate from the AI's opinions</h3>
+      <p>Everything stated as a fact comes from plain code. The AI only writes summaries and
+      "things to check." Disable the AI and every error and warning is identical.</p>
+    </div>
+    <div class="panel">
+      <span class="pill brand">Goal 3</span>
+      <h3>Work on many datasets, not just one</h3>
+      <p>All the dataset-specific knowledge lives in one small description file. The checking
+      engines never change. Onboarding a new dataset = write one description, not new code.</p>
+    </div>
+    <div class="panel">
+      <span class="pill brand">Goal 4</span>
+      <h3>Only claim what can be defended</h3>
+      <p>If a feature can't be shown to be sound, it doesn't ship. The AI is held to a narrow,
+      advisory role precisely so the tool never asserts something it can't stand behind.</p>
+    </div>
+  </div>
+
+  <h2>The single idea that makes it all work</h2>
+  <p>Every check, whatever it looks for, returns the <strong>same kind of object</strong>: a
+  <code>Finding</code>. Because every check emits this one common type, the report can display any of
+  them without knowing what they do, and a new check is rendered with no extra reporting code.</p>
+
+  <div class="ex">
+<span class="c"># one Finding — the "common currency" the whole tool speaks</span>
+Finding(
+  check    = <span class="s">"units.out_of_range"</span>,   <span class="c"># which check fired</span>
+  severity = <span class="e">"error"</span>,                 <span class="c"># info / warn / error</span>
+  row_id   = <span class="k">31204</span>,                   <span class="c"># where (or None = whole dataset)</span>
+  field    = <span class="s">"reclong"</span>,               <span class="c"># which column</span>
+  message  = <span class="s">"longitude is outside the valid range"</span>,
+  evidence = <span class="s">"reclong = 354.47"</span>,      <span class="c"># the actual offending value</span>
+  expected = <span class="s">"within [-180, 180]"</span>,    <span class="c"># what it should have been</span>
+)
+  </div>
+  <p class="muted">That <code>evidence → expected</code> pair is what gives every finding an honest
+  "here's what I found, here's what it should be" read in the report.</p>
+
+  <h2>How the pieces fit together</h2>
+  <figure>
+    <svg viewBox="0 0 900 360" role="img" aria-label="Pipeline diagram">
+      <defs>
+        <marker id="arr" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 Z" fill="#9aa3b2"></path>
+        </marker>
+      </defs>
+      <!-- dataset -->
+      <rect x="20" y="140" width="130" height="70" rx="12" fill="#fff" stroke="#d7e3fb"></rect>
+      <text x="85" y="168" text-anchor="middle" font-size="14" font-weight="700" fill="#1f2430">Dataset</text>
+      <text x="85" y="188" text-anchor="middle" font-size="11.5" fill="#5b6472">CSV / Hugging Face</text>
+      <!-- load -->
+      <rect x="190" y="140" width="130" height="70" rx="12" fill="#fff" stroke="#e4e7ec"></rect>
+      <text x="255" y="168" text-anchor="middle" font-size="14" font-weight="700" fill="#1f2430">Load</text>
+      <text x="255" y="188" text-anchor="middle" font-size="11.5" fill="#5b6472">normalize columns</text>
+      <!-- checks -->
+      <rect x="360" y="95" width="170" height="160" rx="14" fill="#f6f7f9" stroke="#cfd5df"></rect>
+      <text x="445" y="120" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2430">8 deterministic checks</text>
+      <text x="445" y="143" text-anchor="middle" font-size="11" fill="#5b6472">schema · units · duplicates</text>
+      <text x="445" y="160" text-anchor="middle" font-size="11" fill="#5b6472">near-dup · consistency</text>
+      <text x="445" y="177" text-anchor="middle" font-size="11" fill="#5b6472">PII · labels · formula</text>
+      <text x="445" y="208" text-anchor="middle" font-size="11" font-style="italic" fill="#2f9e6f">plain Python = the facts</text>
+      <!-- findings -->
+      <rect x="570" y="140" width="130" height="70" rx="12" fill="#fff" stroke="#e4e7ec"></rect>
+      <text x="635" y="168" text-anchor="middle" font-size="14" font-weight="700" fill="#1f2430">Findings</text>
+      <text x="635" y="188" text-anchor="middle" font-size="11.5" fill="#5b6472">one shared shape</text>
+      <!-- report -->
+      <rect x="740" y="140" width="140" height="70" rx="12" fill="#eaf1fe" stroke="#d7e3fb"></rect>
+      <text x="810" y="168" text-anchor="middle" font-size="14" font-weight="700" fill="#2f6fed">HTML report</text>
+      <text x="810" y="188" text-anchor="middle" font-size="11.5" fill="#5b6472">triage dashboard</text>
+      <!-- arrows -->
+      <line x1="150" y1="175" x2="188" y2="175" stroke="#9aa3b2" stroke-width="2" marker-end="url(#arr)"></line>
+      <line x1="320" y1="175" x2="358" y2="175" stroke="#9aa3b2" stroke-width="2" marker-end="url(#arr)"></line>
+      <line x1="530" y1="175" x2="568" y2="175" stroke="#9aa3b2" stroke-width="2" marker-end="url(#arr)"></line>
+      <line x1="700" y1="175" x2="738" y2="175" stroke="#9aa3b2" stroke-width="2" marker-end="url(#arr)"></line>
+      <!-- LLM advisory box -->
+      <rect x="360" y="290" width="340" height="56" rx="12" fill="#fff" stroke="#f0c98a" stroke-dasharray="5 4"></rect>
+      <text x="530" y="313" text-anchor="middle" font-size="12.5" font-weight="700" fill="#c6841a">Local AI — advisory only</text>
+      <text x="530" y="331" text-anchor="middle" font-size="11" fill="#5b6472">writes summaries &amp; "what to check" · never changes a finding</text>
+      <line x1="530" y1="290" x2="530" y2="257" stroke="#f0c98a" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arr)"></line>
+    </svg>
+    <figcaption>The straight line (dataset → report) is all plain code. The dashed box is the AI, attached to the side in a strictly advisory role.</figcaption>
+  </figure>
+
+  <h2>Facts vs. the AI: where the line is drawn</h2>
+  <table>
+    <thead><tr><th>Place</th><th>What the AI does</th><th>If you turn the AI off</th></tr></thead>
+    <tbody>
+      <tr><td><code>brief</code></td><td>Writes a plain-language briefing about the columns, from <em>column descriptions only</em>, never the raw data.</td><td>Briefing is skipped. Audit unchanged.</td></tr>
+      <tr><td><code>triage</code></td><td>The ranking is done by code. The AI only adds a one-line summary and a "what to check" note.</td><td>The ranked list still prints, minus the notes.</td></tr>
+      <tr><td><code>labels</code></td><td>The single place the AI can raise a flag itself, by judging whether a category looks wrong. Always advisory ("a human confirms"), and off by default.</td><td>One "skipped" note. Every other check runs.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout good">
+    <strong>The proving ground &amp; the flagship.</strong> The checks were first built against
+    <strong>NASA Meteorite Landings</strong> (about 45,700 rows, small enough to inspect by hand). The
+    headline dataset is <strong>LeMat-Bulk</strong>, computed materials-science data stitched together
+    from several source databases, chosen deliberately because reconciling sources that disagree makes
+    it <em>measurably error-prone</em>.
+  </div>
+
+  <div class="toc">
+    <a data-go="checks" href="#">→ See the 8 checks with examples</a>
+    <a data-go="benchmark" href="#">→ The benchmark &amp; rubric</a>
+    <a data-go="analysis" href="#">→ The Kaggle benchmark: results &amp; deep dive</a>
+    <a data-go="glossary" href="#">→ Plain-words glossary</a>
+  </div>
+</section>
+
+<!-- ====================== CHECKS ====================== -->
+<section class="page" id="checks">
+  <h1>The checks</h1>
+  <p class="lede">There are eight. Seven are pure code with no AI involved at all. Each one scans
+  the table and turns whatever it finds into <code>Finding</code> objects. Severity is colour-coded:
+  <span class="pill error">error</span> = a contradiction or impossible value,
+  <span class="pill warn">warn</span> = suspicious, a human should look,
+  <span class="pill info">info</span> = context.</p>
+
+  <figure>
+    <img src="images/report-detail.png" alt="A finding expanded in the report: a chemical-formula disagreement with FOUND versus EXPECTED, a suggested fix, the offending row, and keep/dismiss/needs-review actions" style="width:100%;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)">
+    <figcaption>One finding, expanded. The <code>formula</code> check has caught three formula columns that disagree. Every finding carries <strong>FOUND → EXPECTED</strong>, a suggested fix, the full offending row, and human triage actions (keep / dismiss / needs review). The AI never decides; a person does.</figcaption>
+  </figure>
+
+  <h2>What each check looks for</h2>
+  <div class="grid g2">
+    <div class="panel">
+      <span class="pill warn">deterministic</span> <h3>1 · schema — missing data</h3>
+      <p>Flags columns that are mostly empty.</p>
+      <p class="muted">Example (LeMat): <code>dos_ef</code> is ~37% empty, as that property is only computed for some materials.</p>
+    </div>
+    <div class="panel">
+      <span class="pill error">deterministic</span> <h3>2 · units — impossible / out-of-range</h3>
+      <p>Flags numbers outside what's physically possible for that column.</p>
+      <p class="muted">Example (meteorites): a longitude of <code>354.47</code> when valid is −180…180; a mass of <code>0</code> g; a year of <code>2501</code> (in the future).</p>
+    </div>
+    <div class="panel">
+      <span class="pill error">deterministic</span> <h3>3 · duplicates — repeated rows &amp; keys</h3>
+      <p>Flags exact duplicate rows, and IDs that are supposed to be unique but aren't.</p>
+      <p class="muted">Example (LeMat): the same <code>immutable_id</code> appears 122 times, once per calculation method.</p>
+    </div>
+    <div class="panel">
+      <span class="pill warn">deterministic</span> <h3>4 · near_dup — same thing, different identity</h3>
+      <p>Flags rows whose <em>content</em> matches but whose ID differs: a probable duplicate.</p>
+      <p class="muted">Example (LeMat): 240 rows where one structure fingerprint spans several IDs (the same crystal ingested from several source databases).</p>
+    </div>
+    <div class="panel">
+      <span class="pill warn">deterministic</span> <h3>5 · consistency — rows that share a key should agree</h3>
+      <p>If two rows are "the same thing," their shared facts must match.</p>
+      <p class="muted">Example (LeMat): every row sharing an <code>immutable_id</code> must agree on its structure. (It does; this axis is genuinely clean.)</p>
+    </div>
+    <div class="panel">
+      <span class="pill warn">deterministic</span> <h3>6 · pii — personal information</h3>
+      <p>Scans text columns for emails, phone numbers, card numbers, and similar: always at least the
+      rigid identifiers (email, SSN), and more when a column is declared free text. Matches are shown <em>masked</em>.</p>
+      <p class="muted">Use case: a "notes" column in a public dataset that accidentally contains someone's email.</p>
+    </div>
+    <div class="panel">
+      <span class="pill info">AI (opt-in)</span> <h3>7 · labels — does this category make sense?</h3>
+      <p>The one check that asks the AI: is this label plausible given the row? Always advisory, off by default.</p>
+      <p class="muted">Example: an element labelled phase "<code>solid</code>" when it's Mercury (liquid at room temperature).</p>
+    </div>
+    <div class="panel">
+      <span class="pill error">deterministic</span> <h3>8 · formula — chemistry that must agree</h3>
+      <p>A materials-only check (dormant unless switched on). Three formula columns describe the same composition, so if they disagree it's an internal contradiction.</p>
+      <p class="muted">Example: the descriptive formula says <code>Cd2In2P2</code> but the reduced form claims <code>Cd2InP</code>: different proportions, a real ingest bug.</p>
+    </div>
+  </div>
+
+  <h2>What it actually finds: two real datasets</h2>
+  <p>These are the real counts the tool produces. The two datasets fail in different ways from
+  identical engines.</p>
+
+  <div class="grid g2">
+    <div class="panel">
+      <h3>NASA Meteorites <span class="muted" style="font-weight:400">· ~45,700 rows · 6,239 findings</span></h3>
+      <div class="bars">
+        <div class="bar-row"><div class="bar-label">null "island" (0,0)</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--warn)"></div></div><div class="bar-val">6,214</div></div>
+        <div class="bar-row"><div class="bar-label">out of range</div><div class="bar-track"><div class="bar-fill" style="width:2%;background:var(--error)"></div></div><div class="bar-val">22</div></div>
+        <div class="bar-row"><div class="bar-label">high null columns</div><div class="bar-track"><div class="bar-fill" style="width:1%;background:var(--warn)"></div></div><div class="bar-val">3</div></div>
+        <div class="bar-row"><div class="bar-label">duplicates</div><div class="bar-track"><div class="bar-fill" style="width:0%;background:#cfd5df"></div></div><div class="bar-val">0</div></div>
+      </div>
+      <p class="muted">Pattern: <strong>placeholder &amp; impossible values</strong>. Thousands of records at the placeholder coordinate (0,0), a few physically impossible values, and no duplicates.</p>
+    </div>
+    <div class="panel">
+      <h3>LeMat-Bulk <span class="muted" style="font-weight:400">· 25,000-row sample · 368 findings</span></h3>
+      <div class="bars">
+        <div class="bar-row"><div class="bar-label">possible duplicate records</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--warn)"></div></div><div class="bar-val">240</div></div>
+        <div class="bar-row"><div class="bar-label">repeated identifier</div><div class="bar-track"><div class="bar-fill" style="width:51%;background:var(--error)"></div></div><div class="bar-val">122</div></div>
+        <div class="bar-row"><div class="bar-label">formula disagreements</div><div class="bar-track"><div class="bar-fill" style="width:2%;background:var(--error)"></div></div><div class="bar-val">4</div></div>
+        <div class="bar-row"><div class="bar-label">unreadable formula</div><div class="bar-track"><div class="bar-fill" style="width:1%;background:var(--warn)"></div></div><div class="bar-val">1</div></div>
+        <div class="bar-row"><div class="bar-label">lots of missing values</div><div class="bar-track"><div class="bar-fill" style="width:1%;background:var(--warn)"></div></div><div class="bar-val">1</div></div>
+      </div>
+      <p class="muted">Pattern: <strong>duplicates &amp; missingness</strong>. The numbers are sound, so nothing is "impossible"; but the same material recurs many times, the expected signature of stitching databases together.</p>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Why identical code tells two different stories.</strong> The engines are generic. What
+    changes between datasets is a small description file (which columns are numeric, their valid
+    ranges, the unique key). That is why it generalises, and why "0 duplicates" on meteorites and
+    "240 near-duplicates" on LeMat both come from identical code.
+  </div>
+
+  <h2>A note on honesty: some checks find nothing, by design</h2>
+  <p>On LeMat-Bulk the range check, the consistency check and the formula check all come back
+  <strong>clean</strong>. That's reported plainly rather than hidden. A check that correctly finds
+  nothing is still doing its job: it's there to catch the bug the instant one appears.</p>
+</section>
+
+<!-- ====================== BENCHMARK & RUBRIC ====================== -->
+<section class="page" id="benchmark">
+  <h1>The benchmark &amp; the readiness rubric</h1>
+  <p class="lede">The deterministic checks are facts, and ordinary unit tests cover them. The one
+  component that can be <em>wrong</em> is the model's judgement, so we measure exactly that with a
+  benchmark designed from the outset to be leakage-safe and hard to game, plus a rubric that
+  aggregates the deterministic findings into a fitness-for-use score.</p>
+
+  <h2>What the benchmark measures</h2>
+  <p>The benchmark is a fixed set of cases with known answers. Each case shows the model one row and
+  asks a single yes/no question: is this categorical value <em>plausible</em> for this row? Half the
+  cases are genuine values and half are planted errors, and the score is simply how often the model's
+  answer matches the known label. Every design choice serves one goal: a high score must require
+  domain knowledge, not a shortcut.</p>
+  <div class="grid g2">
+    <div class="panel">
+      <span class="pill brand">leakage controls</span>
+      <ul class="tight">
+        <li><strong>No answer-bearing context.</strong> The model receives only the element name plus
+          neutral fields (symbol, atomic number, period); nothing that states or entails the label. An
+          automated leakage linter fails the build if any case's sibling fields entail its answer.</li>
+        <li><strong>Disjoint splits.</strong> Cases are partitioned into development, calibration, and a
+          held-out test set scored only once. Tuning never touches the test split.</li>
+        <li><strong>Frozen and baselined.</strong> The prompt is pinned by a SHA-256 hash (any drift
+          fails a test); every score carries a 95% confidence interval and is compared against simple
+          baselines (rubber-stamp checkers), both at ~0.50.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <span class="pill brand">two knowledge axes</span>
+      <ul class="tight">
+        <li><strong>Phase at STP:</strong> is "mercury is solid" plausible? (No; it is liquid.)</li>
+        <li><strong>Metal / nonmetal / metalloid:</strong> is "oxygen is a metal" plausible?
+          (No; it is a nonmetal.)</li>
+        <li>Two independent axes of chemical knowledge, so a high aggregate score reflects reasoning
+          across domains, not recall of a single fact type.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>What a single case looks like</h2>
+  <p>A case is one row plus one yes/no question. Below is a real one: the row claims <strong>helium is
+  a solid</strong>. Helium is a gas, so this is a planted error and the stored label is
+  <em>implausible</em>. This is the complete prompt the model receives, verbatim:</p>
+  <pre style="background:#0f1220;color:#e6e8f0;padding:14px 16px;border-radius:8px;overflow-x:auto;font-size:13px;line-height:1.5;border:1px solid #2a2f45">Column 'phase_at_stp' has value 'solid' for this row.
+Known valid values: solid, liquid, gas.
+Other fields for the same row:
+  element=Helium
+  symbol=He
+  atomic_number=2
+  period=1
+Is 'solid' a plausible value for 'phase_at_stp' given these fields
+and the domain context? Answer plausible=false ONLY if it clearly
+conflicts; treat borderline or uncertain cases as plausible=true
+and lower your confidence.</pre>
+  <p>Note that <strong>nothing in the prompt states helium's phase.</strong> It supplies name, symbol,
+  atomic number, and period, then asks the question. Answering correctly requires prior knowledge of
+  the chemistry; that is the point.</p>
+
+  <div class="grid g2">
+    <div class="panel">
+      <span class="pill brand">scoring</span>
+      <ul class="tight">
+        <li>The model returns a free-text verdict, effectively <code>plausible: true</code> or
+          <code>plausible: false</code>.</li>
+        <li>A deterministic parser maps it to <code>plausible</code> or <code>implausible</code> and
+          compares it to the stored label: match = 1, mismatch = 0.</li>
+        <li><strong>Exact match only:</strong> nothing fuzzy, subjective, or graded by another model.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <span class="pill brand">why a shortcut fails</span>
+      <ul class="tight">
+        <li><strong>No leaky channel.</strong> An earlier version prepended a "context" block that
+          stated the deciding rule; this version sends none.</li>
+        <li><strong>Enforced by a linter.</strong> Every case is scanned so no neighbouring field
+          carries a cue such as "melts" or "boils".</li>
+        <li><strong>The 0.50 baseline is the proof.</strong> A schema-only check that merely confirms
+          the value is one of {solid, liquid, gas} accepts <em>both</em> the true and the planted-wrong
+          case, scoring ~0.50. Only domain knowledge exceeds that; the margin above 0.50 is the signal.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="muted">On Kaggle the prompt travels verbatim, with its SHA-256 fingerprint re-checked so
+  the test cannot silently drift. Only <em>where</em> it runs changes; the fresh set's answers remain
+  server-side.</p>
+
+  <h2>How the score works</h2>
+  <p>Each model answers all 80 cases, and the score is simply <strong>how many it got right</strong>.
+  But a high score only means something if it comes from <em>catching the planted errors</em>, not from
+  calling everything fine. The contrast makes this concrete:</p>
+  <table>
+    <thead><tr><th>Checker</th><th>Got right (of 80)</th><th>Planted errors caught (of 40)</th></tr></thead>
+    <tbody>
+      <tr><td>A model that reasons</td><td><strong>80</strong></td><td><strong>40 (all of them)</strong></td></tr>
+      <tr><td>A "rubber-stamp" check that calls every value fine</td><td>40</td><td>0 (none)</td></tr>
+    </tbody>
+  </table>
+  <p>The rubber-stamp check still gets the 40 genuine values right, so it scores <strong>50%</strong>
+  while catching <em>none</em> of the 40 errors. That is why <strong>50% is the floor to beat</strong>,
+  and why "did it catch the errors?" matters more than the headline percentage on its own.</p>
+  <p>Every score also comes with a small <strong>± range</strong> (a confidence interval). Eighty cases
+  is a sample, so the range is the honest "give or take": a perfect 80 out of 80, for instance, is
+  reported as 100% with a range reaching down to about 95%, because a few unseen cases could always go
+  either way.</p>
+
+  <h2>Dataset &amp; provenance</h2>
+  <div class="grid g2">
+    <div class="panel">
+      <span class="pill brand">population &amp; construction</span>
+      <ul class="tight">
+        <li><strong>Unit.</strong> Each case is one chemical element presented as a data row, with a single categorical field under test (<code>phase_at_stp</code>, or <code>classification</code>).</li>
+        <li><strong>Coverage.</strong> Several dozen elements spanning periods 1–7 and all three classes (metal / nonmetal / metalloid).</li>
+        <li><strong>Matched pairs.</strong> Each element contributes its true value (label <em>plausible</em>) and one planted error drawn from the <em>same allowed vocabulary</em> (label <em>implausible</em>), forcing exact 50/50 balance, so a class prior earns nothing.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <span class="pill brand">ground truth, splits &amp; size</span>
+      <ul class="tight">
+        <li><strong>Truth.</strong> Standard periodic-table chemistry, independently re-verified by a three-perspective adversarial review (0 disputes) before the prompt was frozen.</li>
+        <li><strong>Splits.</strong> Disjoint development / calibration / held-out test; the held-out split is scored once.</li>
+        <li><strong>Size.</strong> N = 80 per domain in the held-out set (grown from 40 to tighten the interval to [0.954, 1.000]).</li>
+        <li><strong>Open vs fresh-private.</strong> Open = the committed public test set (reproducible, possibly seen in training). Fresh-private = newly generated instances, programmatically disjoint from every published split, with the answer key server-side.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>What it found, and fixed</h2>
+  <p>The local model (Qwen3-4B) first scored at the <strong>0.50 floor</strong>: it rated "helium is
+  solid" as plausible. The cause was a strict output format that suppressed the model's reasoning
+  step. Enabling reasoning before the verdict recovered full accuracy.</p>
+  <table>
+    <thead><tr><th>Task</th><th>Strict format</th><th>Reasoning mode</th></tr></thead>
+    <tbody>
+      <tr><td>phase at STP</td><td>0.500 (floor; misses planted errors)</td><td><strong>1.000</strong> (80 / 80)</td></tr>
+      <tr><td>metal / nonmetal / metalloid</td><td>0.500</td><td><strong>1.000</strong> (80 / 80)</td></tr>
+    </tbody>
+  </table>
+  <p class="muted">Held-out test, 80 cases per domain, accuracy with a 95% confidence interval of
+  [0.954, 1.000], Qwen3-4B. The benchmark did its job: it surfaced a real, format-induced failure mode,
+  then verified the fix on cases the model had never seen.</p>
+  <div class="callout good">
+    This benchmark runs <strong>entirely locally</strong>; no Kaggle, no accounts. The held-out set was
+    grown to <strong>80 cases per domain</strong>, and a much smaller model (0.8B) was run as a
+    contrast: under the frozen prompt it could not produce a schema-valid answer at all. That is itself
+    informative, since it shows the perfect score is not reproducible by an arbitrary model. With the
+    core claim established locally, the benchmark was <strong>published to Kaggle as a public
+    cross-model leaderboard</strong>; see the <a data-go="analysis" href="#">Kaggle &amp; deep dive</a> page.
+  </div>
+  <div class="callout good">
+    <strong>The publishing question, answered.</strong> A held-out test stays meaningful only while its
+    answers are secret, so the concern was that publishing would expose the answer key and invalidate
+    the benchmark. Kaggle's model resolves it: tasks are <strong>private by default</strong>, you can run
+    them and read the scoreboard <em>without</em> publishing, and publishing with
+    <code>--no-publish-backing-notebook</code> exposes <strong>only the scoreboard</strong>, keeping
+    the cases and answers server-side. The result is a public leaderboard <em>and</em> a still-fair
+    test. The one irreversible step (publishing is one-way) is verified on a throwaway task before
+    anything real is made public.
+  </div>
+
+  <h2>The readiness rubric</h2>
+  <p>Beyond enumerating defects, the rubric answers <strong>"is this dataset fit for use?"</strong> It
+  aggregates the deterministic findings into per-dimension scores (completeness, consistency,
+  plausibility, duplication, privacy) and an overall figure. Run <code>auditor rubric</code>, or read
+  the panel at the top of the report.</p>
+  <ul class="tight">
+    <li>A <strong>deterministic aggregation of facts</strong>: model judgements never move a score.</li>
+    <li>A dimension whose checks did not run is marked <strong>"not assessed"</strong>, never a misleading 100.</li>
+    <li>Example scores: meteorites <strong>94/100</strong>, LeMat-Bulk <strong>99/100</strong>.</li>
+  </ul>
+
+  <h2>Threats to validity</h2>
+  <p>Stated plainly, because a public benchmark should name its own limits:</p>
+  <div class="grid g2">
+    <div class="panel">
+      <span class="pill warn">construct</span>
+      <p>Accuracy on <em>planted</em> binary errors is a proxy for catching <em>organic</em> mislabels.
+      Planted errors are clean by construction and may be easier than messy real-world ones. Mitigation:
+      every planted error is another valid-vocabulary value, so the model cannot succeed by format or
+      range checks alone.</p>
+    </div>
+    <div class="panel">
+      <span class="pill warn">external / scope</span>
+      <p>The evidence base is two chemistry domains over element-level facts that are well represented in
+      pretraining. Results need not transfer to rarer entities or to non-chemistry categoricals. The
+      shipped check is dataset-agnostic, but its <em>validation</em> is these two domains.</p>
+    </div>
+    <div class="panel">
+      <span class="pill warn">ceiling &amp; contamination</span>
+      <p>Among reasoning-capable models the task is near-saturated, so it does not finely rank frontier
+      models (see the Deep-dive caveat). The open set may sit in training data; the fresh-private set
+      mitigates this, and the fact that private tracks open is the evidence scores are not inflated.</p>
+    </div>
+    <div class="panel">
+      <span class="pill warn">measurement</span>
+      <p>Decoding is deterministic (temperature 0) and each model is run once, so the confidence interval
+      reflects case-to-case variation, not seed-to-seed variance. The free-text verdict is mapped by a
+      fixed parser whose tie-break (uncertain → plausible) matches the shipped instruction.</p>
+    </div>
+  </div>
+
+  <h2>Where the methodology sits in the research</h2>
+  <p>None of this was lifted from a paper; it was built from first principles to be defensible. The
+  choices nonetheless align with established and current research, which is a good sign they are sound
+  rather than ad hoc:</p>
+  <ul class="tight">
+    <li><strong>Let the model reason; don't force a rigid format.</strong> Forcing JSON-only output
+      dropped the small model to chance (50%); letting it think first took it to 100%. That is exactly
+      the effect measured in <a href="https://arxiv.org/abs/2408.02442"><em>"Let Me Speak Freely?"</em>
+      (Tam et al., EMNLP 2024)</a>: strict format constraints measurably degrade LLM reasoning. We hit
+      it first-hand, then fixed it the way the research predicts.</li>
+    <li><strong>Designing against benchmark contamination.</strong> Planting our own defects and
+      opening a frozen test set only once is the standard defence against
+      <a href="https://arxiv.org/abs/2502.14425">data contamination / benchmark leakage</a>: evaluation
+      data bleeding into training so a high score is just memory. It is an active research area, with
+      contamination as high as ~45% reported on popular benchmarks.</li>
+    <li><strong>"Is this dataset fit for use?"</strong> The readiness rubric asks the same question as
+      Neil Lawrence's <a href="https://arxiv.org/abs/1705.02245"><em>Data Readiness Levels</em> (2017)</a>:
+      a shared language for how usable a dataset is. <span class="muted">Honest caveat: our rubric is a
+      pragmatic, in-house scoring scheme; it borrows the question, not a validated method.</span></li>
+    <li><strong>Held-out splits, trivial baselines, and confidence intervals</strong> are textbook
+      evaluation hygiene: a model must beat trivial baselines on data it never saw, and every number
+      carries an honest error bar (a 95% confidence interval).</li>
+  </ul>
+  <div class="callout">
+    <strong>The honest version.</strong> The project does not <em>depend</em> on any of these papers;
+    its code cites none. The point is the opposite: built carefully from first principles, it
+    independently lands on what the literature recommends. Where the link is only loose (the rubric),
+    it says so.
+  </div>
+</section>
+
+<!-- ====================== DEEP DIVE ====================== -->
+<section class="page" id="analysis">
+  <h1>Deep dive: methodology, Kaggle&nbsp;Benchmarks, and what we learned</h1>
+  <p class="lede">The honest, end-to-end account: the claim we set out to defend, the leakage-safe
+  method built to defend it, how Kaggle Benchmarks actually works and how we used it, the
+  cross-vendor result it produced, and a candid verdict on what the platform was, and wasn't, good
+  for.</p>
+
+  <div class="toc">
+    <a href="#a-claim">1 · The claim</a>
+    <a href="#a-method">2 · Methodology</a>
+    <a href="#a-howkaggle">3 · How Kaggle works</a>
+    <a href="#a-howused">4 · The prompt &amp; tasks</a>
+    <a href="#a-result">5 · The leaderboard</a>
+    <a href="#a-learned">6 · What we learned</a>
+    <a href="#a-useful">7 · Was it useful?</a>
+  </div>
+
+  <!-- 1 -->
+  <h2 id="a-claim">1 · The claim we set out to defend</h2>
+  <p>The product flags likely-wrong scientific data. Most of its checks are <strong>deterministic</strong>: plain code, same answer every time. One check is different: an <strong>opt-in, AI-powered "label
+  plausibility" judge</strong> that reads a categorical label (for example, the phase-at-STP recorded
+  for an element) and says whether it looks plausible. It is <strong>advisory</strong>: it can raise a
+  flag for a human, but it never overrides a deterministic fact.</p>
+  <p>An advisory AI check is only worth shipping if a reviewer can trust it. So a skeptic gets to ask
+  two hard questions, and the entire evaluation layer exists to answer them:</p>
+  <div class="grid g2">
+    <div class="panel">
+      <span class="pill warn">objection 1</span>
+      <h3>"It's just memorising"</h3>
+      <p>A frontier model has read most of the public web. A perfect score on facts it may have seen
+      in training proves nothing about <em>reasoning</em>; it could be recall.</p>
+    </div>
+    <div class="panel">
+      <span class="pill warn">objection 2</span>
+      <h3>"It's an artifact"</h3>
+      <p>Maybe the score is a quirk of one model, or of a leaky prompt that hints the answer, rather
+      than a real, repeatable capability.</p>
+    </div>
+  </div>
+
+  <!-- 2 -->
+  <h2 id="a-method">2 · The methodology: a leakage-safe benchmark</h2>
+  <p>Both objections are answered by <em>construction</em>, before any model runs. Seven safeguards
+  travel with every task:</p>
+  <div class="grid g2">
+    <div class="panel">
+      <span class="pill brand">frozen prompt</span>
+      <h3>What ships is what's tested</h3>
+      <p>The question is byte-identical to the shipped product's prompt builder, and its hash is
+      pinned. The eval cannot quietly drift to an easier prompt than the real tool uses.</p>
+    </div>
+    <div class="panel">
+      <span class="pill brand">exact-match scoring</span>
+      <h3>No model grades a model</h3>
+      <p>Verdicts are parsed to plausible / implausible and compared to a golden label by plain code.
+      No "LLM-as-judge" trust dependency sneaks in.</p>
+    </div>
+    <div class="panel">
+      <span class="pill brand">disjoint splits</span>
+      <h3>Tuning never sees the test</h3>
+      <p>Separate dev / calibration / held-out sets. Anything we adjusted was adjusted on dev; the
+      held-out set is opened only to score.</p>
+    </div>
+    <div class="panel">
+      <span class="pill brand">no answer-bearing context</span>
+      <h3>The question can't leak the answer</h3>
+      <p>The prompt is handed only a minimal <code>{element, symbol}</code> context. The label being
+      judged is never hinted, and an automated leak-checker + a value&#8596;label decorrelation guard
+      enforce this on every case.</p>
+    </div>
+    <div class="panel">
+      <span class="pill brand">a trivial-baseline floor</span>
+      <h3>0.50 is the bar to beat</h3>
+      <p>Vocabulary-frequency and majority-class baselines both sit at <strong>0.50</strong>. A model
+      must clear that with real world knowledge; a high score only counts because the floor is low.</p>
+    </div>
+    <div class="panel">
+      <span class="pill brand">honest error bars</span>
+      <h3>80 cases, 95% confidence range</h3>
+      <p>Eighty held-out cases per domain (grown from 40 to tighten the range to [0.954, 1.000]).
+      Every score is reported with its confidence range, not as a bare number.</p>
+    </div>
+  </div>
+  <p>Two domains carry the test: <strong>phase-at-STP plausibility</strong> (is "solid" right for this
+  element at room conditions?) and <strong>element classification</strong> (metal / nonmetal /
+  metalloid). The first turns out to be the sharper instrument; the second is easier (more about why
+  below).</p>
+  <div class="callout">
+    <strong>The contamination two-track.</strong> Because the public cases live in a public GitHub
+    repo, each domain also ships a <em>fresh-private</em> set: newly minted questions over the same
+    known elements, built to be provably disjoint from anything published, and kept server-side. We
+    report the <em>open</em> (reproducible, maybe-seen) and <em>private</em> (pristine) numbers side
+    by side; both appear in the <a href="#a-result">cross-model leaderboard</a> below.
+  </div>
+
+  <!-- 3 -->
+  <h2 id="a-howkaggle">3 · How Kaggle Benchmarks actually works</h2>
+  <p>Most people picture a Kaggle "competition": a fixed dataset, you upload predictions. Kaggle
+  <strong>Benchmarks</strong> is the inverse: it is an <strong>author-writes-the-eval</strong>
+  product. <em>You</em> write the test; Kaggle supplies the models and the compute.</p>
+  <div class="step"><div class="n">1</div><div><strong>You write a Python task.</strong> A small
+    self-contained file that, for each case, asks a model a question and scores the answer. The model
+    is reached through Kaggle's <strong>Model Proxy</strong>: you call <code>llm.prompt(text,
+    reasoning="high")</code> and never touch an API key or a model download.</div></div>
+  <div class="step"><div class="n">2</div><div><strong>You push it.</strong> Kaggle validates the
+    task and stores it. The task returns a <code>tuple[float, float]</code> = (accuracy, 95% CI
+    half-width), so the leaderboard can render value&#8201;±&#8201;interval.</div></div>
+  <div class="step"><div class="n">3</div><div><strong>You run it against the catalog.</strong>
+    <code>run -m anthropic/claude-haiku-4-5</code>, <code>-m google/gemini-3-flash</code>, and so on.
+    Kaggle executes your eval <em>on its own hardware</em> against <em>its own frontier-model
+    catalog</em>, for free.</div></div>
+  <div class="step"><div class="n">4</div><div><strong>A public leaderboard is built.</strong>
+    Anyone can see the scoreboard and rerun the open task. Scoring stays exact-match, so the
+    defensibility of the local protocol carries over unchanged.</div></div>
+  <div class="grid g2">
+    <div class="panel">
+      <span class="pill good">the privacy lever</span>
+      <h3>Scoreboard public, answers hidden</h3>
+      <p>Tasks are private by default; publishing is a one-way door. The flag
+      <code>--no-publish-backing-notebook</code> publishes <em>only</em> the scoreboard and keeps the
+      embedded answer key server-side, which is exactly what lets the fresh-private set stay a fair
+      test while still appearing on a public board.</p>
+    </div>
+    <div class="panel">
+      <span class="pill warn">the sharp edge</span>
+      <h3>The board is version-scoped</h3>
+      <p>Every push bumps the task version, and the displayed board reflects only the <em>latest</em>
+      version; earlier runs drop off. Re-pushing therefore wipes good results from view. The
+      discipline: push once, then run the whole model set on that final version.</p>
+    </div>
+  </div>
+
+  <!-- 4 -->
+  <h2 id="a-howused">4 · Inside the tasks: the prompt and the cases</h2>
+  <p>Two domains × {open, fresh-private} = <strong>four self-contained tasks</strong>. Each embeds the
+  frozen prompt plus pre-rendered cases and golden labels, so nothing of the product's source needs
+  shipping and the answer key never leaves Kaggle. They are <strong>auto-generated</strong> from the
+  benchmark by a build script (never hand-edited), which is what guarantees the published question is
+  the same one the local protocol froze. It is worth opening one up.</p>
+
+  <h3>The prompt, exactly as it ships</h3>
+  <p>The question handed to the model is byte-identical to the product's own prompt builder
+  (<code>auditor.checks.labels.build_label_prompt</code>). For the phase domain it reads, here with a
+  real row filled in:</p>
+  <div class="ex">Column '<span class="k">phase_at_stp</span>' has value '<span class="s">liquid</span>' for this row.<br>Known valid values: solid, liquid, gas.<br>Other fields for the same row:<br>&nbsp;&nbsp;element=Mercury<br>&nbsp;&nbsp;symbol=Hg<br>&nbsp;&nbsp;atomic_number=80<br>&nbsp;&nbsp;period=6<br>Is '<span class="s">liquid</span>' a plausible value for '<span class="k">phase_at_stp</span>' given these fields and the domain context? Answer <span class="e">plausible=false</span> ONLY if it clearly conflicts; treat borderline or uncertain cases as <span class="s">plausible=true</span> and lower your confidence.</div>
+  <p>Three things are deliberate in that text:</p>
+  <ul class="tight">
+    <li><strong>No answer-bearing context.</strong> The model gets only <code>element</code>,
+    <code>symbol</code>, <code>atomic_number</code>, <code>period</code>, never anything that states
+    or implies the phase. (The phrase "the domain context" is the shipped builder's own generic
+    wording; <em>no</em> grounding block is injected. An earlier benchmark version <em>did</em> leak an
+    answer-bearing context and was thrown out; this one passes none.)</li>
+    <li><strong>A conservative decision rule.</strong> "Answer <code>plausible=false</code> ONLY if it
+    clearly conflicts" matches the product: the check is there to flag confident contradictions, not to
+    second-guess every borderline value.</li>
+    <li><strong>It is hash-pinned.</strong> The file carries the prompt's SHA
+    (<code>sha256:03bab39…</code>); a test fails if the shipped prompt and the benchmarked prompt ever
+    drift apart.</li>
+  </ul>
+
+  <h3>How the cases are built: planted errors in matched pairs</h3>
+  <p>Each element contributes a <strong>matched pair</strong>: the same row shown once with its true
+  value (expected <em>plausible</em>) and once with a wrong value (expected <em>implausible</em>). A
+  few real cases from the open set:</p>
+  <table>
+    <thead><tr><th>Element</th><th>Value shown</th><th>Truth</th><th>Golden verdict</th></tr></thead>
+    <tbody>
+      <tr><td>Mercury</td><td>liquid</td><td>liquid</td><td><span class="pill good">plausible</span></td></tr>
+      <tr><td>Mercury</td><td>solid</td><td>liquid</td><td><span class="pill error">implausible</span></td></tr>
+      <tr><td>Gold</td><td>solid</td><td>solid</td><td><span class="pill good">plausible</span></td></tr>
+      <tr><td>Gold</td><td>gas</td><td>solid</td><td><span class="pill error">implausible</span></td></tr>
+      <tr><td>Radon</td><td>gas</td><td>gas</td><td><span class="pill good">plausible</span></td></tr>
+      <tr><td>Radon</td><td>liquid</td><td>gas</td><td><span class="pill error">implausible</span></td></tr>
+    </tbody>
+  </table>
+  <p>Pairing does two things. It keeps the classes <strong>balanced</strong> (half plausible, half
+  implausible), which is exactly why both trivial baselines land at 0.50. And it isolates the skill being
+  tested: the two rows differ only in the one value, so getting the pair right means the model knows
+  mercury is liquid and gold is solid, not that it learned a class prior. What counts most is whether
+  the model catches the planted errors, since flagging real mistakes is the whole job of the check.</p>
+  <p><strong>The condition is fixed.</strong> Phase is temperature- and pressure-dependent, so the
+  field is specifically <em>phase at STP</em> (standard temperature and pressure), under which each
+  element has exactly one correct phase. The planted value is therefore wrong <em>at that fixed
+  condition</em>, not merely a state the element could never reach. The few elements that sit near a
+  phase boundary at room temperature (for example gallium, which melts at 29.8&nbsp;°C) are covered by
+  the frozen prompt's conservative rule, which scores any genuinely borderline case as plausible.</p>
+  <div class="callout">
+    <strong>Why a schema check can't do this.</strong> Every value shown (solid, liquid, gas) is a
+    <em>member of the allowed vocabulary</em>. So a "valid-values" or range check marks all of them
+    plausible and catches <em>none</em> of the planted errors: it scores 0.50. Beating the floor here
+    demands actual world knowledge, which is the whole point of having an AI check at all.</p>
+  </div>
+
+  <h3>Why free text, not forced JSON</h3>
+  <p>The product parses a structured <code>LabelVerdict</code> object. The Kaggle task makes one
+  deliberate adaptation: it asks for a free-text reply and parses the verdict with a small
+  deterministic rule (an explicit <code>plausible=true/false</code> wins; otherwise keywords; an
+  uncertain reply defaults to <em>plausible</em>, matching the shipped instruction). The reason is the
+  core finding itself: <strong>forcing a rigid JSON grammar suppresses reasoning and drops small
+  models to the floor</strong>. Parsing free text keeps the test faithful to the reasoning-mode
+  configuration that works, instead of quietly testing a harder, JSON-constrained task.</p>
+
+  <h3>One run, one score</h3>
+  <p>Each task is a <strong>single run per model</strong> (not a per-row fan-out): it scores all 80
+  cases concurrently and returns <code>(accuracy, 95% CI half-width)</code>, so the leaderboard shows
+  one row per model with its interval. The same file, run as a script, prints the two deterministic
+  baselines (the 0.50 floor) without calling any model. The second domain,
+  <code>element_classification</code>, is the identical shape over the column
+  <code>classification</code> with allowed values metal / nonmetal / metalloid.</p>
+
+  <h3>The sweep</h3>
+  <p>With the tasks pushed once (the board is version-scoped), we swept Kaggle's catalog: Claude Haiku
+  4.5, Gemini 3 Flash, Gemini 3.1 Flash-Lite, GLM-5, and the crucial pair: Qwen3-Next-80B in both
+  its <em>Instruct</em> and <em>Thinking</em> modes. The run was deliberately <strong>paced and
+  gap-only</strong> to respect the free-credit limit: a single cheap probe to confirm credit, then one
+  model at a time, filling only empty cells. Output is left <strong>uncapped</strong>, the only
+  configuration compatible with reasoning mode (see the lessons below).</p>
+
+  <!-- 5 -->
+  <h2 id="a-result">5 · The leaderboard, and what it tells us</h2>
+  <p>The benchmark is published on Kaggle as <strong>four public tasks</strong> and run against
+  Kaggle's own frontier-model catalog. Here is the full cross-model board.</p>
+  <div class="callout good">
+    <strong>It is live.</strong> Both domains are published as four public Kaggle tasks: an
+    <em>open</em> (public) set and a <em>fresh-private</em> (never-published) set each. The scoreboards
+    are public; the fresh sets' answer keys stay server-side (<code>--no-publish-backing-notebook</code>).
+  </div>
+  <p>The two domains are <strong>Phase</strong> (phase-at-STP: solid / liquid / gas) and
+  <strong>Element</strong> (element classification: metal / nonmetal / metalloid), each scored on its
+  open and fresh-private set. Each score is the share of 80 cases the model got right; the rubber-stamp
+  floor is <strong>0.50</strong>.</p>
+  <table>
+    <thead><tr><th>Model</th><th>Phase open</th><th>Phase private</th><th>Element open</th><th>Element private</th></tr></thead>
+    <tbody>
+      <tr><td>Claude Haiku 4.5</td><td>0.988</td><td>0.988</td><td><strong>1.000</strong></td><td><strong>1.000</strong></td></tr>
+      <tr><td>Gemini 3 Flash</td><td><strong>1.000</strong></td><td>0.975</td><td>0.975</td><td>0.938</td></tr>
+      <tr><td>Gemini 3.1 Flash-Lite</td><td><strong>1.000</strong></td><td><strong>1.000</strong></td><td>0.988</td><td>0.988</td></tr>
+      <tr><td>GLM-5</td><td><strong>1.000</strong></td><td><strong>1.000</strong></td><td>0.975</td><td>0.975</td></tr>
+      <tr><td>Qwen3-Next-80B <em>Thinking</em></td><td><strong>1.000</strong></td><td>†</td><td>†</td><td>†</td></tr>
+      <tr><td>Qwen3-Next-80B <em>Instruct</em></td><td><strong>0.513</strong></td><td><strong>0.513</strong></td><td>0.675</td><td>0.763</td></tr>
+    </tbody>
+  </table>
+  <p class="muted">80 cases each (give or take about 0.023 at the top). † The Thinking variant scored
+  the headline phase-open cell, then hit Kaggle's per-call quota wall: each uncapped reasoning call
+  reserves about $0.31 and the day's credit ran out, so its other three cells need a fresh credit
+  window, not a code change. DeepSeek V3.2 and gpt-oss-120b errored on transient provider load
+  (429 / 503), a provider state, not a property of the benchmark. Our local Qwen3-4B (reasoning) scored
+  1.000 on both, our reference point.</p>
+  <p>The single clearest signal is a controlled comparison: the <strong>same</strong> 80-billion-parameter
+  model on the <strong>same</strong> phase-open task, changing one thing: whether it is allowed to reason.</p>
+  <div class="panel">
+    <h3 style="margin-top:0">Phase-at-STP accuracy (open set, N=80)</h3>
+    <div class="bars">
+      <div class="bar-row"><div class="bar-label">Gemini 3 Flash</div>
+        <div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--brand)"></div></div>
+        <div class="bar-val">1.000</div></div>
+      <div class="bar-row"><div class="bar-label">Gemini 3.1 Flash-Lite</div>
+        <div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--brand)"></div></div>
+        <div class="bar-val">1.000</div></div>
+      <div class="bar-row"><div class="bar-label">GLM-5</div>
+        <div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--brand)"></div></div>
+        <div class="bar-val">1.000</div></div>
+      <div class="bar-row"><div class="bar-label"><strong>Qwen-80B Thinking</strong></div>
+        <div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--good)"></div></div>
+        <div class="bar-val">1.000</div></div>
+      <div class="bar-row"><div class="bar-label">Claude Haiku 4.5</div>
+        <div class="bar-track"><div class="bar-fill" style="width:98.8%;background:var(--brand)"></div></div>
+        <div class="bar-val">0.988</div></div>
+      <div class="bar-row"><div class="bar-label"><strong>Qwen-80B Instruct</strong></div>
+        <div class="bar-track"><div class="bar-fill" style="width:51.3%;background:var(--warn)"></div></div>
+        <div class="bar-val">0.513</div></div>
+    </div>
+    <p class="muted" style="margin-bottom:0">The 0.50 trivial-baseline floor runs through the middle of
+    the track. Four frontier models sit at the top; the same 80B model that scores 1.000
+    <em>with</em> reasoning collapses to the coin-flip floor <em>without</em> it.</p>
+  </div>
+  <div class="callout">
+    <strong>How to read these scores.</strong> Each cell is the share of 80 cases the model got right,
+    where half the cases are genuine values and half are planted errors. A perfect score means it
+    caught every planted error and raised no false alarms; the 0.50 floor is what a checker that just
+    rubber-stamps everything would get. Each number carries a small ± range because 80 cases is a
+    sample. The <a href="#" data-go="benchmark">Benchmark &amp; rubric</a> page walks through this.
+  </div>
+  <div class="grid g3">
+    <div class="panel">
+      <span class="pill good">it discriminates</span>
+      <h3>A real top and bottom</h3>
+      <p>A test everyone aces measures nothing. This one separates models: four cluster near-perfect,
+      Qwen-Instruct cannot beat random guessing on phase. That spread is what makes a high score
+      meaningful.</p>
+    </div>
+    <div class="panel">
+      <span class="pill good">reasoning is the cause</span>
+      <h3>Objection 2, answered</h3>
+      <p>Same model, same frozen prompt, only the reasoning toggle changes: 1.000 vs 0.513. The
+      capability is reasoning, not a prompt artifact, and it reproduces our local Qwen3-4B result on
+      a different model family and someone else's hardware.</p>
+    </div>
+    <div class="panel">
+      <span class="pill brand">private tracks open</span>
+      <h3>Objection 1, answered</h3>
+      <p>Each model's never-published private score matches its public open score (Gemini-Lite
+      1.00/1.00, GLM-5 1.00/1.00, Qwen-Instruct 0.51/0.51). If memorising were inflating scores, open
+      would tower over private. It doesn't.</p>
+    </div>
+  </div>
+  <div class="callout">
+    <strong>What these numbers do and don't show.</strong> Among reasoning-capable models the scores
+    are near-saturated (0.94&#8211;1.00), so this is <em>not</em> a fine-grained ranking of frontier
+    models: the gaps sit within or near the confidence intervals, and we make no claim that one
+    frontier model beats another here. That is expected, because the benchmark is an
+    <strong>acceptance test</strong> for a shipping advisory check ("is the label judge reliable in
+    reasoning mode?"), not a frontier-discrimination instrument. The signal is therefore not the
+    height of the cluster but the structure around it: a real 0.50 floor, a within-model reasoning
+    contrast (1.000 vs 0.513), and private scores that track open. Discriminating <em>among</em> the
+    top models would require deliberately harder cases (ambiguous edge chemistry, adversarial
+    near-misses), which we did not build because the product needs known facts checked reliably.
+  </div>
+
+  <!-- 6 -->
+  <h2 id="a-learned">6 · What we learned</h2>
+  <div class="grid g2">
+    <div class="panel">
+      <span class="pill good">about the science</span>
+      <h3>Reasoning, not scale or recall</h3>
+      <ul class="tight">
+        <li>The check's reliability is a property of <strong>reasoning mode</strong>, shown across
+        vendors, not of one model and not of memorisation.</li>
+        <li><strong>Difficulty is task-dependent.</strong> Phase-at-STP forces reasoning (Instruct at
+        the 0.51 floor); element classification is more learnable from pretraining (Instruct already
+        0.68&#8211;0.76), so reasoning's marginal value is smaller there. The honest reading: phase is
+        the discriminating task.</li>
+        <li>A score that beats the 0.50 floor, survives the private set, <em>and</em> reproduces
+        across vendors is genuinely hard to dismiss.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <span class="pill warn">about the tooling</span>
+      <h3>Hard-won operational lessons</h3>
+      <ul class="tight">
+        <li><strong>Free credit is small.</strong> Each uncapped reasoning call <em>reserves</em>
+        ~$0.31&#8211;0.42; the binding limit is the per-call reservation, not parallelism. Run the most
+        expensive model <em>first</em>, while credit is fullest.</li>
+        <li><strong>You can't cap output under <code>reasoning="high"</code></strong>: it sets a large
+        server-side thinking budget, so any cap that would shrink the reservation also breaks the
+        reasoning models. Cap and reasoning are mutually exclusive; uncapped is the only valid config.</li>
+        <li><strong>Transient provider errors are real</strong> (429 heavy-load, 503 unreachable) and
+        model-specific, not benchmark flaws.</li>
+        <li><strong>Auth auto-refreshes</strong> on a free call; the browser login flow was a dead end
+        in our environment.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 7 -->
+  <h2 id="a-useful">7 · Was Kaggle Benchmarks useful? A candid verdict</h2>
+  <div class="grid g2">
+    <div class="panel">
+      <span class="pill good">what it gave us</span>
+      <ul class="tight">
+        <li><strong>A multi-vendor frontier catalog, free.</strong> It turned the deferred "test more
+        models" goal (otherwise gated by our single local GPU) into a live result.</li>
+        <li><strong>External validation.</strong> The reasoning thesis reproduced on infrastructure
+        and model families that are not ours.</li>
+        <li><strong>A durable public artifact.</strong> Four leaderboards anyone can inspect and
+        rerun.</li>
+        <li><strong>Our exact method travelled unchanged</strong>: frozen prompt, exact-match,
+        baselines, leak-checker all ride inside the task.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <span class="pill warn">what it cost</span>
+      <ul class="tight">
+        <li><strong>A free-credit ceiling</strong> that forces careful pacing; the priciest reasoning
+        model (Qwen-Thinking) couldn't fully complete in a single day.</li>
+        <li><strong>A coarse quota model</strong>: an uncapped call reserves the whole context window.</li>
+        <li><strong>Version-scoped boards and opaque validation errors</strong> that cost iteration
+        time until the patterns were understood.</li>
+        <li><strong>Some flaky catalog providers.</strong></li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout good">
+    <strong>Verdict: net strongly positive for our goal.</strong> Kaggle Benchmarks took a claim that
+    previously rested on one model on one machine and turned it into a public, cross-vendor
+    confirmation at zero infrastructure cost. Its limits are <em>operational</em>, not scientific:
+    they bound how much of the board we can fill per day, not whether the result holds. The core
+    finding (let the model reason and the advisory check is trustworthy; force a terse answer and it
+    fails) now stands on someone else's hardware, in the open.
+  </div>
+</section>
+
+<!-- ====================== GLOSSARY ====================== -->
+<section class="page" id="glossary">
+  <h1>Plain-words glossary</h1>
+  <p class="lede">Every confusing name in this project, translated. If a term shows up elsewhere in
+  the explainer and you're not sure what it means, it's defined here.</p>
+
+  <div class="callout">
+    <strong>Read this one first.</strong> <span class="key">"the prompt builder of the shipped tool"</span>
+    = the piece of code <em>in the real product</em> that writes the question sent to the AI. Nothing more.
+    "Shipped tool" = the real product. "Prompt" = the question. "Prompt builder" = the code that writes it.
+  </div>
+
+  <h2>Everyday words used in a specific way</h2>
+  <table>
+    <thead><tr><th>Term</th><th>Plain meaning</th></tr></thead>
+    <tbody>
+      <tr><td class="key">shipped / the shipped tool</td><td>The actual product people download and run — the real thing, not experiment or test code.</td></tr>
+      <tr><td class="key">deterministic</td><td>Plain code that gives the same answer every time. No AI involved. "The facts."</td></tr>
+      <tr><td class="key">advisory</td><td>A suggestion only. The AI's notes are advisory — a human decides, and they never change a fact.</td></tr>
+      <tr><td class="key">flagship / proving ground</td><td>Flagship = the headline dataset (LeMat-Bulk). Proving ground = the practice dataset used to build the checks (meteorites).</td></tr>
+      <tr><td class="key">degrade gracefully</td><td>Keep working when something is missing. Turn the AI off and the tool still runs — it just drops the AI's extras.</td></tr>
+      <tr><td class="key">opt-in / dormant</td><td>Off unless you switch it on. The formula and labels checks are opt-in.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Words about the AI</h2>
+  <table>
+    <thead><tr><th>Term</th><th>Plain meaning</th></tr></thead>
+    <tbody>
+      <tr><td class="key">prompt</td><td>The question (a block of text) you send to the AI.</td></tr>
+      <tr><td class="key">prompt builder</td><td>Code that <em>writes</em> the prompt from the data, so it's identical every time. Example: it turns <code>Mercury</code> + <code>solid</code> into the sentence "Is 'solid' plausible for Mercury?".</td></tr>
+      <tr><td class="key">domain context / grounding</td><td>A short paragraph of background facts about the dataset, stuck to the front of the prompt so the AI has the knowledge it needs. "Grounding" = giving the AI facts to reason from.</td></tr>
+      <tr><td class="key">schema / output schema</td><td>The required <em>shape</em> of the AI's answer (e.g. "reply with true/false + one sentence"), so the code can read it reliably.</td></tr>
+      <tr><td class="key">LLM</td><td>"Large language model" — just the AI model itself (the thing that reads the prompt and answers).</td></tr>
+      <tr><td class="key">local / vLLM</td><td>The AI runs on your own computer (via a program called vLLM), not a paid cloud service. Nothing leaves your machine.</td></tr>
+      <tr><td class="key">judge</td><td>Ask the AI to decide something (e.g. "is this label plausible?"). Used only in the opt-in labels check.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Words about the code &amp; structure</h2>
+  <table>
+    <thead><tr><th>Term</th><th>Plain meaning</th></tr></thead>
+    <tbody>
+      <tr><td class="key">Finding</td><td>One problem found, in a fixed format (what, where, how serious, what it should've been). The "common currency" every part of the tool speaks.</td></tr>
+      <tr><td class="key">check</td><td>One detector that scans the data and produces Findings (e.g. the duplicates check).</td></tr>
+      <tr><td class="key">severity</td><td>How serious: <span class="pill error">error</span> (a contradiction), <span class="pill warn">warn</span> (suspicious), <span class="pill info">info</span> (context).</td></tr>
+      <tr><td class="key">DatasetSpec</td><td>The small description file for one dataset (which columns are numbers, the valid ranges, the unique ID). Adding a dataset = writing one of these.</td></tr>
+      <tr><td class="key">triage</td><td>Sorting the findings into a sensible reading order (most serious first) and adding short notes.</td></tr>
+      <tr><td class="key">key / unique key</td><td>A column whose value should appear only once (an ID). A repeat is a "duplicate key."</td></tr>
+      <tr><td class="key">near-duplicate</td><td>Two rows whose content matches but whose ID differs — probably the same thing recorded twice.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Words about soundness</h2>
+  <table>
+    <thead><tr><th>Term</th><th>Plain meaning</th></tr></thead>
+    <tbody>
+      <tr><td class="key">reproducible</td><td>Run it again and you get the same answer. The deterministic checks are; an AI guess often isn't.</td></tr>
+      <tr><td class="key">data leakage</td><td>The answer sneaks into the question, so a shortcut can score well without really reasoning. A reason to throw a test out.</td></tr>
+      <tr><td class="key">contamination</td><td>The model has already seen the test (e.g. it was scraped from the web), so a high score may just be memory.</td></tr>
+      <tr><td class="key">unproven</td><td>"It sounds like it should work" with no experiment behind it. A hypothesis, not a result — so it doesn't ship as a feature.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<div class="footer">
+  <strong>dataset-auditor</strong> · open source · Python · pandas · vLLM (Qwen3-4B) · Kaggle Benchmarks<br>
+  <a href="https://github.com/AmandineFlachs/dataset-auditor">github.com/AmandineFlachs/dataset-auditor</a>
+  &nbsp;·&nbsp;
+  <a href="https://www.kaggle.com/benchmarks/tasks/amandineflachs/dataset-auditor-labels-plausibility-open">Kaggle leaderboards</a>
+</div>
+
+</main>
+
+<script>
+  const tabs = document.getElementById('tabs');
+  const pages = document.querySelectorAll('.page');
+  function go(id){
+    pages.forEach(p => p.classList.toggle('active', p.id === id));
+    tabs.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.go === id));
+    window.scrollTo({top:0, behavior:'instant'});
+  }
+  document.querySelectorAll('[data-go]').forEach(el=>{
+    el.addEventListener('click', e=>{ e.preventDefault(); go(el.dataset.go); });
+  });
+</script>
+</body>
+</html>
