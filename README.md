@@ -15,6 +15,9 @@ Project + OQMD + Alexandria); **NASA Meteorite Landings** is the proving ground.
 
 > Early but functional — `v0.2.0`. Built in public.
 
+📖 **[Read the project explainer →](https://amandineflachs.github.io/dataset-auditor/)** — the full
+story: what it does, the leakage-safe benchmark, and the cross-model leaderboard.
+
 ### What it does
 
 - 🔍 **Eight deterministic checks** — missing data, impossible / out-of-range values,
