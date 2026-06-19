@@ -177,30 +177,6 @@ runs against a real vLLM server) plus the v2 leakage-safe evaluation layer and r
 The benchmark is now **published on Kaggle** as a public, cross-model leaderboard (see
 [`kaggle/`](kaggle/) and [Evaluation](#evaluation)).
 
-```mermaid
-flowchart TB
-    subgraph F ["Foundation"]
-        direction LR
-        P0["Phase 0<br/>Scaffold + Finding contract"] --> P1["Phase 1<br/>Load + profile"] --> P2["Phase 2<br/>Deterministic checks"]
-    end
-    subgraph G ["Generalize"]
-        direction LR
-        P25["Phase 2.5<br/>Multi-dataset + LeMat-Bulk"] --> P3["Phase 3<br/>LLM layer + 4 checks"]
-    end
-    subgraph S ["Ship"]
-        direction LR
-        P4["Phase 4<br/>HTML triage report"] --> P5["Phase 5<br/>Package, CLI &amp; docs"]
-    end
-    F --> G --> S --> EV["v2<br/>Leakage-safe eval + readiness rubric"] --> REL(["v0.2.0 · current release"]) --> KAG["Published to Kaggle<br/>4 tasks · cross-model leaderboard"] --> N["What's next<br/>config-file rules · Streamlit UI"]
-
-    classDef done fill:#e6f4ea,stroke:#34a853,color:#0d652d;
-    classDef rel fill:#fef7e0,stroke:#f9ab00,color:#b06000;
-    classDef next fill:#f1f3f4,stroke:#9aa0a6,color:#3c4043,stroke-dasharray:5 4;
-    class P0,P1,P2,P25,P3,P4,P5,EV,KAG done
-    class REL rel
-    class N next
-```
-
 | Phase | What | Status |
 |---|---|---|
 | 0 | Scaffold + `Finding` contract | ✅ Done |
@@ -215,39 +191,9 @@ flowchart TB
 | Kaggle | Publish the benchmark (4 tasks, open + fresh-private, cross-model leaderboard) | ✅ Done |
 | next | Config-file rules · Streamlit UI | ⏳ Next |
 
-### Phase 3 in detail
-
-Phase 3 added the LLM-assisted layer without compromising reusability: every new
-check is a **generic engine** configured by a `DatasetSpec`. Done:
-
-1. **`auditor.llm`** — a thin local-vLLM client that *degrades gracefully* when the
-   server is offline (one info finding, deterministic checks untouched).
-2. **`consistency.py`** — *rows sharing a key should agree.* On LeMat-Bulk the same
-   `immutable_id` recurs once per functional, so the rule asserts identical
-   **structure**; energies are deliberately not compared (they differ legitimately
-   across functionals). Honestly clean on the sample.
-3. **`near_dup.py`** — *same content, different identity = a probable duplicate.* On
-   LeMat this **fires on real data**: 240 rows where one `entalpic_fingerprint` spans
-   multiple `immutable_id`s (a structure ingested from several source DBs).
-4. **`pii.py`** — regex tier (email/SSN/card/phone/IP) with masked evidence. **Always
-   runs**: declared text columns get every detector; with none declared it auto-detects
-   text columns and scans them for the rigid identifiers (email, SSN) only. Clean on both
-   flagships.
-5. **`labels.py`** — LLM-judged categorical plausibility, the first consumer of
-   `auditor.llm`. Samples, degrades gracefully, fixture-demonstrated.
-
-6. **`formula.py`** — the one genuinely materials-specific check, kept as an
-   *opt-in, dormant-by-default* domain pack (runs only when a spec sets
-   `formula_rules`, so meteorites never sees it). The three OPTIMADE formula columns
-   are redundant encodings of one composition, so disagreement is an internal
-   contradiction (`error`); the `elements` list and `nelements` count ride along as
-   cross-checks. Deliberately dependency-free — the columns have a trivial regular
-   grammar and are compared against each other, not external chemistry. Honestly
-   clean across all 25k LeMat rows; a crafted-defect test proves it fires.
-
-A multi-agent **compound-engineering review pass** then hardened the codebase (11
-verified issues fixed/pinned with tests). See [`ROADMAP.md`](ROADMAP.md) for the full
-breakdown.
+The LLM-assisted checks (consistency, near-duplicate, PII, labels) and the opt-in materials
+formula-agreement pack are all generic engines configured by a `DatasetSpec` — none is bound to one
+dataset. See [`ROADMAP.md`](ROADMAP.md) for the per-check breakdown and the design rationale.
 
 ## Flagship: LeMaterial/LeMat-Bulk
 

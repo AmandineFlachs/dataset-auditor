@@ -82,5 +82,6 @@ AUDITOR_LLM_MODEL=Qwen/Qwen3-4B PYTHONUTF8=1 python kaggle/run_local.py kaggle/l
 ```
 
 Publishing/running on Kaggle uses the separate `kaggle` CLI (`pip install kaggle`,
-`kaggle auth login`, `kaggle benchmarks init`). See the generator headers for details. The
+`kaggle auth login`, `kaggle benchmarks init`) — see the
+[official kaggle-benchmarks docs](https://github.com/Kaggle/kaggle-benchmarks) for the SDK. The
 fresh-private generator and its outputs live under `private/` and are gitignored on purpose.
