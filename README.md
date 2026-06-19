@@ -398,13 +398,11 @@ memorisation). Scoring stays exact-match; each task returns `(accuracy, 95% CI)`
 | Gemini 3 Flash | 1.000 | 0.975 | 0.975 | 0.938 |
 | Gemini 3.1 Flash-Lite | 1.000 | 1.000 | 0.988 | 0.988 |
 | GLM-5 | 1.000 | 1.000 | 0.975 | 0.975 |
-| Qwen3-Next-80B **Thinking** | **1.000** | † | † | † |
+| Qwen3-Next-80B **Thinking** | **1.000** | **1.000** | **1.000** | **1.000** |
 | Qwen3-Next-80B **Instruct** | **0.513** | **0.513** | 0.675 | 0.763 |
 
-*(N=80 each; accuracy with 95% Wilson CI half-width ≈ ±0.023 at 1.000. † Thinking completed
-phase-open then hit the Model Proxy's per-call quota wall — each uncapped reasoning call reserves
-~$0.31, which exceeded the day's remaining credit; the other three cells need a fresh credit window
-(a cap can't lower it without breaking reasoning mode). DeepSeek V3.2 and gpt-oss-120b errored on
+*(N=80 each; accuracy with 95% Wilson CI half-width ≈ ±0.023 at 1.000. Thinking scored a clean 1.000
+across all four cells (both open and both private). DeepSeek V3.2 and gpt-oss-120b errored on
 transient provider load (429/503) — not a property of the benchmark.)* The
 headline: the **same** 80B model scores **1.000 Thinking vs 0.513 Instruct** on phase-plausibility —
 the reasoning thesis, live across vendors. Four frontier models cluster near-perfect while

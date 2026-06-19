@@ -859,16 +859,14 @@ and lower your confidence.</pre>
       <tr><td>Gemini 3 Flash</td><td><strong>1.000</strong></td><td>0.975</td><td>0.975</td><td>0.938</td></tr>
       <tr><td>Gemini 3.1 Flash-Lite</td><td><strong>1.000</strong></td><td><strong>1.000</strong></td><td>0.988</td><td>0.988</td></tr>
       <tr><td>GLM-5</td><td><strong>1.000</strong></td><td><strong>1.000</strong></td><td>0.975</td><td>0.975</td></tr>
-      <tr><td>Qwen3-Next-80B <em>Thinking</em></td><td><strong>1.000</strong></td><td>†</td><td>†</td><td>†</td></tr>
+      <tr><td>Qwen3-Next-80B <em>Thinking</em></td><td><strong>1.000</strong></td><td><strong>1.000</strong></td><td><strong>1.000</strong></td><td><strong>1.000</strong></td></tr>
       <tr><td>Qwen3-Next-80B <em>Instruct</em></td><td><strong>0.513</strong></td><td><strong>0.513</strong></td><td>0.675</td><td>0.763</td></tr>
     </tbody>
   </table>
-  <p class="muted">80 cases each (give or take about 0.023 at the top). † The Thinking variant scored
-  the headline phase-open cell, then hit Kaggle's per-call quota wall: each uncapped reasoning call
-  reserves about $0.31 and the day's credit ran out, so its other three cells need a fresh credit
-  window, not a code change. DeepSeek V3.2 and gpt-oss-120b errored on transient provider load
-  (429 / 503), a provider state, not a property of the benchmark. Our local Qwen3-4B (reasoning) scored
-  1.000 on both, our reference point.</p>
+  <p class="muted">80 cases each (give or take about 0.023 at the top). The Thinking variant scored a
+  clean 1.000 across all four cells (both open and both private). DeepSeek V3.2 and gpt-oss-120b errored
+  on transient provider load (429 / 503), a provider state, not a property of the benchmark. Our local
+  Qwen3-4B (reasoning) scored 1.000 on both, our reference point.</p>
   <p>The single clearest signal is a controlled comparison: the <strong>same</strong> 80-billion-parameter
   model on the <strong>same</strong> phase-open task, changing one thing: whether it is allowed to reason.</p>
   <div class="panel">

@@ -32,16 +32,16 @@ so the answer key stays server-side). A score on the private set cannot be dismi
 | Gemini 3 Flash | 1.000 | 0.975 | 0.975 | 0.938 |
 | Gemini 3.1 Flash-Lite | 1.000 | 1.000 | 0.988 | 0.988 |
 | GLM-5 | 1.000 | 1.000 | 0.975 | 0.975 |
-| Qwen3-Next-80B **Thinking** | **1.000** | † | † | † |
+| Qwen3-Next-80B **Thinking** | **1.000** | **1.000** | **1.000** | **1.000** |
 | Qwen3-Next-80B **Instruct** | **0.513** | **0.513** | 0.675 | 0.763 |
 | DeepSeek V3.2 / gpt-oss-120b | errored | errored | errored | errored |
 
-† Thinking completed phase-open (the headline cell) then hit the per-call quota wall: each uncapped
-`reasoning="high"` call reserves ~$0.31, which exceeded the day's remaining credit after the other
-five models ran. A `max_tokens` cap would lower the reservation but `reasoning="high"` sets a
-server-side thinking budget >24576, so any cap below it 400s Anthropic models and truncates thinking
-models — uncapped is the only valid config. The three cells need a fresh credit window, not a code
-change.
+Thinking scored a clean 1.000 across all four cells (both open and both private). Its cells were run
+across separate daily credit windows because each uncapped `reasoning="high"` call reserves ~$0.31;
+a `max_tokens` cap would lower the reservation but `reasoning="high"` sets a server-side thinking
+budget >24576, so any cap below it 400s Anthropic models and truncates thinking models — uncapped is
+the only valid config. DeepSeek V3.2 and gpt-oss-120b errored on transient provider load (429/503) —
+a provider state, not a property of the benchmark.
 
 *Local reference:* Qwen3-4B in reasoning mode scores **1.000** on both domains (see
 [`benchmarks/`](../benchmarks/)). *Deterministic floor:* the vocabulary and majority-class baselines
