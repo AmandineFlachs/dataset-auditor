@@ -408,7 +408,8 @@ Finding(
       <ul class="tight">
         <li><strong>No answer-bearing context.</strong> The model receives only the element name plus
           neutral fields (symbol, atomic number, period); nothing that states or entails the label. An
-          automated leakage linter fails the build if any case's sibling fields entail its answer.</li>
+          automated leakage linter fails the build if any case's sibling fields entail its answer (an
+          earlier version prepended a context block stating the deciding rule; that channel was removed).</li>
         <li><strong>Disjoint splits.</strong> Cases are partitioned into development, calibration, and a
           held-out test set scored only once. Tuning never touches the test split.</li>
         <li><strong>Frozen and baselined.</strong> The prompt is pinned by a SHA-256 hash (any drift
@@ -447,29 +448,15 @@ and lower your confidence.</pre>
   atomic number, and period, then asks the question. Answering correctly requires prior knowledge of
   the chemistry; that is the point.</p>
 
-  <div class="grid g2">
-    <div class="panel">
-      <span class="pill brand">scoring</span>
-      <ul class="tight">
-        <li>The model returns a free-text verdict, effectively <code>plausible: true</code> or
-          <code>plausible: false</code>.</li>
-        <li>A deterministic parser maps it to <code>plausible</code> or <code>implausible</code> and
-          compares it to the stored label: match = 1, mismatch = 0.</li>
-        <li><strong>Exact match only:</strong> nothing fuzzy, subjective, or graded by another model.</li>
-      </ul>
-    </div>
-    <div class="panel">
-      <span class="pill brand">why a shortcut fails</span>
-      <ul class="tight">
-        <li><strong>No leaky channel.</strong> An earlier version prepended a "context" block that
-          stated the deciding rule; this version sends none.</li>
-        <li><strong>Enforced by a linter.</strong> Every case is scanned so no neighbouring field
-          carries a cue such as "melts" or "boils".</li>
-        <li><strong>The 0.50 baseline is the proof.</strong> A schema-only check that merely confirms
-          the value is one of {solid, liquid, gas} accepts <em>both</em> the true and the planted-wrong
-          case, scoring ~0.50. Only domain knowledge exceeds that; the margin above 0.50 is the signal.</li>
-      </ul>
-    </div>
+  <div class="panel">
+    <span class="pill brand">scoring</span>
+    <ul class="tight">
+      <li>The model returns a free-text verdict, effectively <code>plausible: true</code> or
+        <code>plausible: false</code>.</li>
+      <li>A deterministic parser maps it to <code>plausible</code> or <code>implausible</code> and
+        compares it to the stored label: match = 1, mismatch = 0.</li>
+      <li><strong>Exact match only:</strong> nothing fuzzy, subjective, or graded by another model.</li>
+    </ul>
   </div>
   <p class="muted">On Kaggle the prompt travels verbatim, with its SHA-256 fingerprint re-checked so
   the test cannot silently drift. Only <em>where</em> it runs changes; the fresh set's answers remain
@@ -509,7 +496,7 @@ and lower your confidence.</pre>
       <ul class="tight">
         <li><strong>Truth.</strong> Standard periodic-table chemistry, independently re-verified by a three-perspective adversarial review (0 disputes) before the prompt was frozen.</li>
         <li><strong>Splits.</strong> Disjoint development / calibration / held-out test; the held-out split is scored once.</li>
-        <li><strong>Size.</strong> N = 80 per domain in the held-out set (grown from 40 to tighten the interval to [0.954, 1.000]).</li>
+        <li><strong>Size.</strong> N = 80 per domain in the held-out set.</li>
         <li><strong>Open vs fresh-private.</strong> Open = the committed public test set (reproducible, possibly seen in training). Fresh-private = newly generated instances, programmatically disjoint from every published split, with the answer key server-side.</li>
       </ul>
     </div>

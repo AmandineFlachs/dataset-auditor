@@ -53,8 +53,7 @@ knowledge.
 "reasoning beats forced/terse output" thesis, reproduced across vendors on Kaggle's infrastructure.
 The benchmark *discriminates* (four frontier models cluster near-perfect, Qwen-Instruct sits at the
 floor on phase), and each model's fresh-private number tracks its open one (no contamination
-inflation). DeepSeek V3.2 and gpt-oss-120b errored on transient provider load (429 heavy-load /
-503 unreachable) on every attempt — a provider state, not a property of the benchmark.
+inflation).
 
 ## Design (per task file)
 
