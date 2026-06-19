@@ -15,6 +15,9 @@ Project + OQMD + Alexandria); **NASA Meteorite Landings** is the proving ground.
 
 > Early but functional — `v0.2.0`. Built in public.
 
+📖 **[Read the project explainer →](https://amandineflachs.github.io/dataset-auditor/)** — the full
+story: what it does, the leakage-safe benchmark, and the cross-model leaderboard.
+
 ### What it does
 
 - 🔍 **Eight deterministic checks** — missing data, impossible / out-of-range values,
@@ -174,31 +177,8 @@ across all four configs (`compatible_pbe/pbesol/scan`, `non_compatible`).
 
 Everything through **`v0.2.0` is ✅ done** — the `v0.1.0` core (checks, report, live local-LLM
 runs against a real vLLM server) plus the v2 leakage-safe evaluation layer and readiness rubric.
-The next step is **publishing the proven benchmark to Kaggle**.
-
-```mermaid
-flowchart TB
-    subgraph F ["Foundation"]
-        direction LR
-        P0["Phase 0<br/>Scaffold + Finding contract"] --> P1["Phase 1<br/>Load + profile"] --> P2["Phase 2<br/>Deterministic checks"]
-    end
-    subgraph G ["Generalize"]
-        direction LR
-        P25["Phase 2.5<br/>Multi-dataset + LeMat-Bulk"] --> P3["Phase 3<br/>LLM layer + 4 checks"]
-    end
-    subgraph S ["Ship"]
-        direction LR
-        P4["Phase 4<br/>HTML triage report"] --> P5["Phase 5<br/>Package, CLI &amp; docs"]
-    end
-    F --> G --> S --> EV["v2<br/>Leakage-safe eval + readiness rubric"] --> REL(["v0.2.0 · current release"]) --> N["What's next<br/>publish benchmark to Kaggle<br/>config-file rules · Streamlit UI"]
-
-    classDef done fill:#e6f4ea,stroke:#34a853,color:#0d652d;
-    classDef rel fill:#fef7e0,stroke:#f9ab00,color:#b06000;
-    classDef next fill:#f1f3f4,stroke:#9aa0a6,color:#3c4043,stroke-dasharray:5 4;
-    class P0,P1,P2,P25,P3,P4,P5,EV done
-    class REL rel
-    class N next
-```
+The benchmark is now **published on Kaggle** as a public, cross-model leaderboard (see
+[`kaggle/`](kaggle/) and [Evaluation](#evaluation)).
 
 | Phase | What | Status |
 |---|---|---|
@@ -211,41 +191,12 @@ flowchart TB
 | 5 | Package + CLI (`auditor run`), docs | ✅ Done |
 | D | Live local-LLM runs (`brief`, `triage`, label judging) | ✅ Done |
 | v2 | Leakage-safe evaluation (2 tasks, N=80 held-out) + readiness rubric | ✅ Done |
-| next | Publish the proven benchmark to Kaggle | ⏳ Next |
+| Kaggle | Publish the benchmark (4 tasks, open + fresh-private, cross-model leaderboard) | ✅ Done |
+| next | Config-file rules · Streamlit UI | ⏳ Next |
 
-### Phase 3 in detail
-
-Phase 3 added the LLM-assisted layer without compromising reusability: every new
-check is a **generic engine** configured by a `DatasetSpec`. Done:
-
-1. **`auditor.llm`** — a thin local-vLLM client that *degrades gracefully* when the
-   server is offline (one info finding, deterministic checks untouched).
-2. **`consistency.py`** — *rows sharing a key should agree.* On LeMat-Bulk the same
-   `immutable_id` recurs once per functional, so the rule asserts identical
-   **structure**; energies are deliberately not compared (they differ legitimately
-   across functionals). Honestly clean on the sample.
-3. **`near_dup.py`** — *same content, different identity = a probable duplicate.* On
-   LeMat this **fires on real data**: 240 rows where one `entalpic_fingerprint` spans
-   multiple `immutable_id`s (a structure ingested from several source DBs).
-4. **`pii.py`** — regex tier (email/SSN/card/phone/IP) with masked evidence. **Always
-   runs**: declared text columns get every detector; with none declared it auto-detects
-   text columns and scans them for the rigid identifiers (email, SSN) only. Clean on both
-   flagships.
-5. **`labels.py`** — LLM-judged categorical plausibility, the first consumer of
-   `auditor.llm`. Samples, degrades gracefully, fixture-demonstrated.
-
-6. **`formula.py`** — the one genuinely materials-specific check, kept as an
-   *opt-in, dormant-by-default* domain pack (runs only when a spec sets
-   `formula_rules`, so meteorites never sees it). The three OPTIMADE formula columns
-   are redundant encodings of one composition, so disagreement is an internal
-   contradiction (`error`); the `elements` list and `nelements` count ride along as
-   cross-checks. Deliberately dependency-free — the columns have a trivial regular
-   grammar and are compared against each other, not external chemistry. Honestly
-   clean across all 25k LeMat rows; a crafted-defect test proves it fires.
-
-A multi-agent **compound-engineering review pass** then hardened the codebase (11
-verified issues fixed/pinned with tests). See [`ROADMAP.md`](ROADMAP.md) for the full
-breakdown.
+The LLM-assisted checks (consistency, near-duplicate, PII, labels) and the opt-in materials
+formula-agreement pack are all generic engines configured by a `DatasetSpec` — none is bound to one
+dataset. See [`ROADMAP.md`](ROADMAP.md) for the per-check breakdown and the design rationale.
 
 ## Flagship: LeMaterial/LeMat-Bulk
 
@@ -381,6 +332,32 @@ let to think first. A much smaller model (Qwen3.5-0.8B) sits *below* the harness
 floor — it can't emit a valid verdict under the frozen prompt — so the 1.000 is not reproducible by
 just any model. The readiness rubric (above) rolls the deterministic findings into per-dimension
 scores; LLM labels stay advisory and never move it.
+
+### On Kaggle: a public cross-model leaderboard
+
+The same benchmark is **published on [Kaggle Benchmarks](https://www.kaggle.com/benchmarks)** so
+frontier models can be compared on it directly — see [`kaggle/`](kaggle/). Each domain ships as an
+**open** set (the public cases above — reproducible, but a model may have seen them) and a
+**fresh-private** set (newly minted, never published, so a score can't be dismissed as
+memorisation). Scoring stays exact-match; each task returns `(accuracy, 95% CI)`.
+
+| Model | Phase-STP open | Phase-STP private | Element open | Element private |
+|---|---|---|---|---|
+| Claude Haiku 4.5 | 0.988 | 0.988 | 1.000 | 1.000 |
+| Gemini 3 Flash | 1.000 | 0.975 | 0.975 | 0.938 |
+| Gemini 3.1 Flash-Lite | 1.000 | 1.000 | 0.988 | 0.988 |
+| GLM-5 | 1.000 | 1.000 | 0.975 | 0.975 |
+| Qwen3-Next-80B **Thinking** | **1.000** | **1.000** | **1.000** | **1.000** |
+| Qwen3-Next-80B **Instruct** | **0.513** | **0.513** | 0.675 | 0.763 |
+
+*(N=80 each; accuracy with 95% Wilson CI half-width ≈ ±0.023 at 1.000. Thinking scored a clean 1.000
+across all four cells (both open and both private). DeepSeek V3.2 and gpt-oss-120b errored on
+transient provider load (429/503) — not a property of the benchmark.)* The
+headline: the **same** 80B model scores **1.000 Thinking vs 0.513 Instruct** on phase-plausibility —
+the reasoning thesis, live across vendors. Four frontier models cluster near-perfect while
+Qwen-Instruct sits at/near the 0.50 floor on phase, so the benchmark **discriminates** (not everyone
+passes); and each model's fresh-private number tracks its open one, so contamination isn't inflating
+the public scores.
 
 ## License
 

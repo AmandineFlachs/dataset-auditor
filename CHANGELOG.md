@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Benchmark published to Kaggle Benchmarks** (`kaggle/`): both domains as four public, runnable
+  tasks — an *open* set (the public test cases) and a *fresh-private* set (never published) each —
+  with a public cross-model leaderboard. The leakage discipline carries over unchanged (frozen
+  prompt, exact-match scoring, baselines as the 0.50 floor); see [`kaggle/README.md`](kaggle/README.md).
+- **Cross-model leaderboard.** Claude Haiku 4.5, both Gemini 3 Flash variants, GLM-5, and
+  Qwen3-Next-80B **Thinking** all score near-perfect across the four tasks; the headline is the
+  **same 80B model at Thinking 1.000 vs Instruct 0.513** on phase-plausibility — the reasoning
+  thesis, live across vendors. The benchmark discriminates (Qwen-Instruct at the 0.50 floor) and
+  each model's fresh-private score tracks its open one (no contamination inflation).
+
 ## [0.2.0] - 2026-06-14
 
 Leakage-safe evaluation layer + dataset-readiness rubric. `main` stays v1; this is the v2 line.
@@ -39,10 +53,9 @@ Leakage-safe evaluation layer + dataset-readiness rubric. `main` stays v1; this 
 
 ### Notes
 
-- A second model (Qwen3.5-0.8B) was tried and sits **below the harness's structured-output floor**:
-  it echoes the schema instead of a verdict, in both reasoning and strict mode, so it produces no
-  score. A side-probe confirms it knows the chemistry — the verbose schema-in-prompt is the limiter.
-  The frozen prompt was **not** relaxed to rescue a score (that would tune the prompt on held-out data).
+- A second model (Qwen3.5-0.8B) sits **below the harness's structured-output floor** — it echoes
+  the schema instead of a verdict, so it produces no score. The frozen prompt was **not** relaxed
+  to rescue it (that would tune on held-out data), so the 1.000 is not trivially reproducible.
 - Test suite: **223 tests**, fully offline (the harness is pure and model-free).
 
 ## [0.1.0] - 2026-06-08
