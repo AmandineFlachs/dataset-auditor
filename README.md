@@ -50,6 +50,13 @@ flowchart TD
     FN --> RP["Self-contained HTML report"]
     FN --> RB["Readiness rubric"]
     FN --> TR["Triage priority"]
+
+    classDef core fill:#dcfce7,stroke:#16a34a,color:#14532d;
+    classDef advisory fill:#fef9c3,stroke:#ca8a04,color:#713f12,stroke-dasharray:4 3;
+    classDef io fill:#f1f5f9,stroke:#94a3b8,color:#0f172a;
+    class DET,FN core;
+    class LLM advisory;
+    class DS,LD,RP,RB,TR io;
 ```
 
 The report is a single self-contained HTML file — a triage dashboard with a health
@@ -368,6 +375,11 @@ flowchart TD
     OPEN --> KB["Kaggle Benchmarks<br/>cross-model leaderboard"]
     PRIV --> KB
     KB --> OUT["accuracy ± 95% CI<br/>must beat the 0.500 baselines"]
+
+    classDef io fill:#f1f5f9,stroke:#94a3b8,color:#0f172a;
+    classDef headline fill:#dcfce7,stroke:#16a34a,color:#14532d;
+    class PR,OPEN,KB io;
+    class PRIV,OUT headline;
 ```
 
 | Model | Phase-STP open | Phase-STP private | Element open | Element private |
