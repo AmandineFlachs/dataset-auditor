@@ -577,34 +577,16 @@ and lower your confidence.</pre>
   </div>
 
   <h2>Where the methodology sits in the research</h2>
-  <p>None of this was lifted from a paper; it was built from first principles to be defensible. The
-  choices nonetheless align with established and current research, which is a good sign they are sound
-  rather than ad hoc:</p>
-  <ul class="tight">
-    <li><strong>Let the model reason; don't force a rigid format.</strong> Forcing JSON-only output
-      dropped the small model to chance (50%); letting it think first took it to 100%. That is exactly
-      the effect measured in <a href="https://arxiv.org/abs/2408.02442"><em>"Let Me Speak Freely?"</em>
-      (Tam et al., EMNLP 2024)</a>: strict format constraints measurably degrade LLM reasoning. We hit
-      it first-hand, then fixed it the way the research predicts.</li>
-    <li><strong>Designing against benchmark contamination.</strong> Planting our own defects and
-      opening a frozen test set only once is the standard defence against
-      <a href="https://arxiv.org/abs/2502.14425">data contamination / benchmark leakage</a>: evaluation
-      data bleeding into training so a high score is just memory. It is an active research area, with
-      contamination as high as ~45% reported on popular benchmarks.</li>
-    <li><strong>"Is this dataset fit for use?"</strong> The readiness rubric asks the same question as
-      Neil Lawrence's <a href="https://arxiv.org/abs/1705.02245"><em>Data Readiness Levels</em> (2017)</a>:
-      a shared language for how usable a dataset is. <span class="muted">Honest caveat: our rubric is a
-      pragmatic, in-house scoring scheme; it borrows the question, not a validated method.</span></li>
-    <li><strong>Held-out splits, trivial baselines, and confidence intervals</strong> are textbook
-      evaluation hygiene: a model must beat trivial baselines on data it never saw, and every number
-      carries an honest error bar (a 95% confidence interval).</li>
-  </ul>
-  <div class="callout">
-    <strong>The honest version.</strong> The project does not <em>depend</em> on any of these papers;
-    its code cites none. The point is the opposite: built carefully from first principles, it
-    independently lands on what the literature recommends. Where the link is only loose (the rubric),
-    it says so.
-  </div>
+  <p>None of this was lifted from a paper; it was built from first principles to be defensible, and it
+  nonetheless lands where the literature does — a sign the choices are sound rather than ad hoc.
+  Forcing rigid output hurt reasoning, the effect measured in
+  <a href="https://arxiv.org/abs/2408.02442"><em>"Let Me Speak Freely?"</em> (Tam et al., 2024)</a>;
+  planting our own defects and opening a frozen test once is the standard defence against
+  <a href="https://arxiv.org/abs/2502.14425">benchmark contamination</a>; and the readiness rubric
+  asks the same "fit for use?" question as <a href="https://arxiv.org/abs/1705.02245">Data Readiness
+  Levels</a> (Lawrence, 2017) — though it borrows the question, not a validated method. Held-out
+  splits, trivial baselines, and confidence intervals are textbook hygiene. The project depends on
+  none of these papers and cites none in code; where a link is only loose, it says so.</p>
 </section>
 
 <!-- ====================== DEEP DIVE ====================== -->
@@ -652,45 +634,15 @@ and lower your confidence.</pre>
   <h2 id="a-method">2 · The methodology: a leakage-safe benchmark</h2>
   <p>Both objections are answered by <em>construction</em>, before any model runs. Seven safeguards
   travel with every task:</p>
-  <div class="grid g2">
-    <div class="panel">
-      <span class="pill brand">frozen prompt</span>
-      <h3>What ships is what's tested</h3>
-      <p>The question is byte-identical to the shipped product's prompt builder, and its hash is
-      pinned. The eval cannot quietly drift to an easier prompt than the real tool uses.</p>
-    </div>
-    <div class="panel">
-      <span class="pill brand">exact-match scoring</span>
-      <h3>No model grades a model</h3>
-      <p>Verdicts are parsed to plausible / implausible and compared to a golden label by plain code.
-      No "LLM-as-judge" trust dependency sneaks in.</p>
-    </div>
-    <div class="panel">
-      <span class="pill brand">disjoint splits</span>
-      <h3>Tuning never sees the test</h3>
-      <p>Separate dev / calibration / held-out sets. Anything we adjusted was adjusted on dev; the
-      held-out set is opened only to score.</p>
-    </div>
-    <div class="panel">
-      <span class="pill brand">no answer-bearing context</span>
-      <h3>The question can't leak the answer</h3>
-      <p>The prompt is handed only a minimal <code>{element, symbol}</code> context. The label being
-      judged is never hinted, and an automated leak-checker + a value&#8596;label decorrelation guard
-      enforce this on every case.</p>
-    </div>
-    <div class="panel">
-      <span class="pill brand">a trivial-baseline floor</span>
-      <h3>0.50 is the bar to beat</h3>
-      <p>Vocabulary-frequency and majority-class baselines both sit at <strong>0.50</strong>. A model
-      must clear that with real world knowledge; a high score only counts because the floor is low.</p>
-    </div>
-    <div class="panel">
-      <span class="pill brand">honest error bars</span>
-      <h3>80 cases, 95% confidence range</h3>
-      <p>Eighty held-out cases per domain (grown from 40 to tighten the range to [0.954, 1.000]).
-      Every score is reported with its confidence range, not as a bare number.</p>
-    </div>
-  </div>
+  <p>Both objections are answered by <em>construction</em>, before any model runs — the same
+  safeguards detailed on the <a data-go="benchmark" href="#">Benchmark &amp; rubric</a> tab, in brief:
+  a <strong>frozen prompt</strong> byte-identical to the shipped builder and pinned by hash;
+  <strong>exact-match scoring</strong> by plain code (no LLM grading an LLM); <strong>disjoint
+  dev / calibration / held-out splits</strong>, the test opened only to score; <strong>no
+  answer-bearing context</strong> (only a minimal <code>{element, symbol}</code>), enforced by an
+  automated leak-checker and a value&#8596;label decorrelation guard; a <strong>0.50 trivial-baseline
+  floor</strong> a model must clear with real knowledge; and <strong>honest 95% confidence ranges</strong>
+  on every number (80 held-out cases per domain, grown from 40 to tighten the range to [0.954, 1.000]).</p>
   <p>Two domains carry the test: <strong>phase-at-STP plausibility</strong> (is "solid" right for this
   element at room conditions?) and <strong>element classification</strong> (metal / nonmetal /
   metalloid). The first turns out to be the sharper instrument; the second is easier (more about why
@@ -745,61 +697,12 @@ and lower your confidence.</pre>
   <p>Two domains × {open, fresh-private} = <strong>four self-contained tasks</strong>. Each embeds the
   frozen prompt plus pre-rendered cases and golden labels, so nothing of the product's source needs
   shipping and the answer key never leaves Kaggle. They are <strong>auto-generated</strong> from the
-  benchmark by a build script (never hand-edited), which is what guarantees the published question is
-  the same one the local protocol froze. It is worth opening one up.</p>
-
-  <h3>The prompt, exactly as it ships</h3>
-  <p>The question handed to the model is byte-identical to the product's own prompt builder
-  (<code>auditor.checks.labels.build_label_prompt</code>). For the phase domain it reads, here with a
-  real row filled in:</p>
-  <div class="ex">Column '<span class="k">phase_at_stp</span>' has value '<span class="s">liquid</span>' for this row.<br>Known valid values: solid, liquid, gas.<br>Other fields for the same row:<br>&nbsp;&nbsp;element=Mercury<br>&nbsp;&nbsp;symbol=Hg<br>&nbsp;&nbsp;atomic_number=80<br>&nbsp;&nbsp;period=6<br>Is '<span class="s">liquid</span>' a plausible value for '<span class="k">phase_at_stp</span>' given these fields and the domain context? Answer <span class="e">plausible=false</span> ONLY if it clearly conflicts; treat borderline or uncertain cases as <span class="s">plausible=true</span> and lower your confidence.</div>
-  <p>Three things are deliberate in that text:</p>
-  <ul class="tight">
-    <li><strong>No answer-bearing context.</strong> The model gets only <code>element</code>,
-    <code>symbol</code>, <code>atomic_number</code>, <code>period</code>, never anything that states
-    or implies the phase. (The phrase "the domain context" is the shipped builder's own generic
-    wording; <em>no</em> grounding block is injected. An earlier benchmark version <em>did</em> leak an
-    answer-bearing context and was thrown out; this one passes none.)</li>
-    <li><strong>A conservative decision rule.</strong> "Answer <code>plausible=false</code> ONLY if it
-    clearly conflicts" matches the product: the check is there to flag confident contradictions, not to
-    second-guess every borderline value.</li>
-    <li><strong>It is hash-pinned.</strong> The file carries the prompt's SHA
-    (<code>sha256:03bab39…</code>); a test fails if the shipped prompt and the benchmarked prompt ever
-    drift apart.</li>
-  </ul>
-
-  <h3>How the cases are built: planted errors in matched pairs</h3>
-  <p>Each element contributes a <strong>matched pair</strong>: the same row shown once with its true
-  value (expected <em>plausible</em>) and once with a wrong value (expected <em>implausible</em>). A
-  few real cases from the open set:</p>
-  <table>
-    <thead><tr><th>Element</th><th>Value shown</th><th>Truth</th><th>Golden verdict</th></tr></thead>
-    <tbody>
-      <tr><td>Mercury</td><td>liquid</td><td>liquid</td><td><span class="pill good">plausible</span></td></tr>
-      <tr><td>Mercury</td><td>solid</td><td>liquid</td><td><span class="pill error">implausible</span></td></tr>
-      <tr><td>Gold</td><td>solid</td><td>solid</td><td><span class="pill good">plausible</span></td></tr>
-      <tr><td>Gold</td><td>gas</td><td>solid</td><td><span class="pill error">implausible</span></td></tr>
-      <tr><td>Radon</td><td>gas</td><td>gas</td><td><span class="pill good">plausible</span></td></tr>
-      <tr><td>Radon</td><td>liquid</td><td>gas</td><td><span class="pill error">implausible</span></td></tr>
-    </tbody>
-  </table>
-  <p>Pairing does two things. It keeps the classes <strong>balanced</strong> (half plausible, half
-  implausible), which is exactly why both trivial baselines land at 0.50. And it isolates the skill being
-  tested: the two rows differ only in the one value, so getting the pair right means the model knows
-  mercury is liquid and gold is solid, not that it learned a class prior. What counts most is whether
-  the model catches the planted errors, since flagging real mistakes is the whole job of the check.</p>
-  <p><strong>The condition is fixed.</strong> Phase is temperature- and pressure-dependent, so the
-  field is specifically <em>phase at STP</em> (standard temperature and pressure), under which each
-  element has exactly one correct phase. The planted value is therefore wrong <em>at that fixed
-  condition</em>, not merely a state the element could never reach. The few elements that sit near a
-  phase boundary at room temperature (for example gallium, which melts at 29.8&nbsp;°C) are covered by
-  the frozen prompt's conservative rule, which scores any genuinely borderline case as plausible.</p>
-  <div class="callout">
-    <strong>Why a schema check can't do this.</strong> Every value shown (solid, liquid, gas) is a
-    <em>member of the allowed vocabulary</em>. So a "valid-values" or range check marks all of them
-    plausible and catches <em>none</em> of the planted errors: it scores 0.50. Beating the floor here
-    demands actual world knowledge, which is the whole point of having an AI check at all.</p>
-  </div>
+  benchmark by a build script (never hand-edited), which guarantees the published question is the same
+  one the local protocol froze: the prompt is byte-identical to the product's builder
+  (<code>auditor.checks.labels.build_label_prompt</code>) and carries its SHA
+  (<code>sha256:03bab39…</code>), so a test fails if the two ever drift apart. The exact prompt, the
+  matched-pair cases, and why a plain valid-values check scores only 0.50 are all on the
+  <a data-go="benchmark" href="#">Benchmark &amp; rubric</a> tab; what is specific to Kaggle is below.</p>
 
   <h3>Why free text, not forced JSON</h3>
   <p>The product parses a structured <code>LabelVerdict</code> object. The Kaggle task makes one
