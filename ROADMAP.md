@@ -75,3 +75,6 @@ Parked on purpose: this is scoping without creep, and each item notes *why* it w
 - **A plugin system for checks.**
 - **CLI config files and check selection beyond simple flags.**
 - **Streamlit front-end** for uploading a CSV and viewing the report in-browser.
+- **A third, non-chemistry dataset** to further prove the engine is dataset-agnostic (and,
+  if it carries a noisy judgeable categorical, to exercise the advisory label check on real
+  data — geographic *city → country* is the candidate).

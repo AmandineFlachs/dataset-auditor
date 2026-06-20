@@ -33,6 +33,24 @@ story: what it does, the leakage-safe benchmark, and the cross-model leaderboard
 - 🧩 **Multi-dataset by design** — onboard a dataset by adding one `DatasetSpec`, not new
   check code.
 
+### How it works
+
+One generic engine runs every check; per-dataset knowledge is just data in a registry.
+The **deterministic core always runs and produces the facts**; the local LLM is an optional
+side-channel that can *annotate and orient* but **never overrides a finding**.
+
+```mermaid
+flowchart TD
+    DS["Dataset / CSV"] --> LD["load — normalize schema, dtypes, stable row_id"]
+    LD --> DET["Deterministic checks — always on<br/>schema · units · duplicates · near-dup<br/>consistency · PII · formula"]
+    LD -. optional, advisory .-> LLM["Local LLM<br/>label plausibility · briefing · triage notes"]
+    DET ==> FN["Findings — one shared schema"]
+    LLM -. never overrides .-> FN
+    FN --> RP["Self-contained HTML report"]
+    FN --> RB["Readiness rubric"]
+    FN --> TR["Triage priority"]
+```
+
 The report is a single self-contained HTML file — a triage dashboard with a health
 summary, a per-check category rail, and expandable findings:
 
@@ -340,6 +358,15 @@ frontier models can be compared on it directly — see [`kaggle/`](kaggle/). Eac
 **open** set (the public cases above — reproducible, but a model may have seen them) and a
 **fresh-private** set (newly minted, never published, so a score can't be dismissed as
 memorisation). Scoring stays exact-match; each task returns `(accuracy, 95% CI)`.
+
+```mermaid
+flowchart TD
+    PR["Shipped build_label_prompt<br/>frozen by SHA-256"] --> OPEN["Open set<br/>public cases · reproducible<br/>(a model may have seen them)"]
+    PR --> PRIV["Fresh-private set<br/>newly minted · never published<br/>(score can't be memorisation)"]
+    OPEN --> KB["Kaggle Benchmarks<br/>cross-model leaderboard"]
+    PRIV --> KB
+    KB --> OUT["accuracy ± 95% CI<br/>must beat the 0.500 baselines"]
+```
 
 | Model | Phase-STP open | Phase-STP private | Element open | Element private |
 |---|---|---|---|---|
