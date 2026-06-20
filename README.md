@@ -40,6 +40,7 @@ The **deterministic core always runs and produces the facts**; the local LLM is 
 side-channel that can *annotate and orient* but **never overrides a finding**.
 
 ```mermaid
+%%{init: {'flowchart': {'curve': 'linear'}}}%%
 flowchart TD
     DS["Dataset / CSV"] --> LD["load — normalize schema, dtypes, stable row_id"]
     LD --> DET["Deterministic checks — always on<br/>schema · units · duplicates · near-dup<br/>consistency · PII · formula"]
@@ -360,6 +361,7 @@ frontier models can be compared on it directly — see [`kaggle/`](kaggle/). Eac
 memorisation). Scoring stays exact-match; each task returns `(accuracy, 95% CI)`.
 
 ```mermaid
+%%{init: {'flowchart': {'curve': 'linear'}}}%%
 flowchart TD
     PR["Shipped build_label_prompt<br/>frozen by SHA-256"] --> OPEN["Open set<br/>public cases · reproducible<br/>(a model may have seen them)"]
     PR --> PRIV["Fresh-private set<br/>newly minted · never published<br/>(score can't be memorisation)"]
