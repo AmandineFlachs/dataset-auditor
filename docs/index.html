@@ -632,8 +632,6 @@ and lower your confidence.</pre>
 
   <!-- 2 -->
   <h2 id="a-method">2 · The methodology: a leakage-safe benchmark</h2>
-  <p>Both objections are answered by <em>construction</em>, before any model runs. Seven safeguards
-  travel with every task:</p>
   <p>Both objections are answered by <em>construction</em>, before any model runs — the same
   safeguards detailed on the <a data-go="benchmark" href="#">Benchmark &amp; rubric</a> tab, in brief:
   a <strong>frozen prompt</strong> byte-identical to the shipped builder and pinned by hash;
@@ -784,13 +782,6 @@ and lower your confidence.</pre>
     <p class="muted" style="margin-bottom:0">The 0.50 trivial-baseline floor runs through the middle of
     the track. Four frontier models sit at the top; the same 80B model that scores 1.000
     <em>with</em> reasoning collapses to the coin-flip floor <em>without</em> it.</p>
-  </div>
-  <div class="callout">
-    <strong>How to read these scores.</strong> Each cell is the share of 80 cases the model got right,
-    where half the cases are genuine values and half are planted errors. A perfect score means it
-    caught every planted error and raised no false alarms; the 0.50 floor is what a checker that just
-    rubber-stamps everything would get. Each number carries a small ± range because 80 cases is a
-    sample. The <a href="#" data-go="benchmark">Benchmark &amp; rubric</a> page walks through this.
   </div>
   <div class="grid g3">
     <div class="panel">
