@@ -20,9 +20,9 @@ story: what it does, the leakage-safe benchmark, and the cross-model leaderboard
 
 ### What it does
 
-- 🔍 **Eight deterministic checks** — missing data, impossible / out-of-range values,
-  duplicate rows and keys, near-duplicates, cross-field consistency, PII, categorical
-  label plausibility, and chemical-formula agreement.
+- 🔍 **Eight checks (seven deterministic + one advisory)** — missing data, impossible /
+  out-of-range values, duplicate rows and keys, near-duplicates, cross-field consistency, PII,
+  and chemical-formula agreement, plus the one LLM-judged check: categorical label plausibility.
 - 🧭 **Found → Expected** on every finding with a concrete target (a range, uniqueness,
   the canonical formula); an honest Evidence → Fix fallback where there is no single
   right answer.
@@ -313,12 +313,11 @@ generated. Point the client elsewhere with `AUDITOR_LLM_BASE_URL` / `AUDITOR_LLM
 isn't in the loop.
 
 **Reasoning models.** Reasoning models (e.g. Qwen3) need to *think* before answering. The
-default strict path forces JSON-only output, which suppresses that thinking and makes a
-small model confabulate — on the label benchmark it scored at the floor (0.500) until
-reasoning was enabled, which took it to **1.000** on held-out data ([`benchmarks/`](benchmarks/)).
-So the `labels` check **defaults to reasoning mode**; for the other LLM helpers you can opt
-in with `AUDITOR_LLM_REASONING=1` (slower, but it lets the model think). If a single call is
-very slow, lower vLLM's `--gpu-memory-utilization` so GPU memory doesn't page to system RAM.
+default strict path forces JSON-only output, which suppresses that thinking and makes a small
+model confabulate — the exact failure the [Evaluation](#evaluation) section measures and fixes.
+So the `labels` check **defaults to reasoning mode**; for the other LLM helpers you can opt in
+with `AUDITOR_LLM_REASONING=1` (slower, but it lets the model think). If a single call is very
+slow, lower vLLM's `--gpu-memory-utilization` so GPU memory doesn't page to system RAM.
 
 ## Development
 
@@ -336,36 +335,28 @@ pulling in pandas, httpx, jinja2, or torch. Install only what you need.
 ## Evaluation
 
 The deterministic checks are facts (covered by `pytest`); the only fallible part is the
-advisory LLM's judgement. That is measured under a **leakage-safe** protocol — see
-[`EVAL_PROTOCOL.md`](EVAL_PROTOCOL.md) (the rules), [`docs/methodology.md`](docs/methodology.md)
-(the reasoning), and [`benchmarks/`](benchmarks/) (the tasks). Each task has disjoint
+advisory LLM's judgement. It is measured under a **leakage-safe** protocol — disjoint
 dev/calibration/held-out splits, balanced classes, a frozen prompt locked by hash, an automated
 leakage linter, a value↔label decorrelation guard, and held-out-only reporting with confidence
-intervals and dumb baselines a real model must beat. The harness is pure and model-free, so CI
-needs no model.
+intervals and dumb baselines (**0.500**) a real model must beat. The harness is pure and
+model-free, so CI needs no model. Rules in [`EVAL_PROTOCOL.md`](EVAL_PROTOCOL.md); tasks in
+[`benchmarks/`](benchmarks/); the full story in the
+[project explainer](https://amandineflachs.github.io/dataset-auditor/).
 
-Two tasks ship today, both reusing the product's own `build_label_prompt` / `LabelVerdict` with
-**no answer-bearing context**:
-
-| Task | What it asks | Held-out (Qwen3-4B, reasoning) |
-|---|---|---|
-| `labels_plausibility` | is a phase-at-STP label plausible? | **1.000**, N=80, 95% CI [0.954, 1.000], F1 1.000 |
-| `element_classification` | metal / nonmetal / metalloid plausible? | **1.000**, N=80, 95% CI [0.954, 1.000], F1 1.000 |
-
-Both beat the vocabulary-floor and majority-class baselines (0.500). The result is **reasoning
-mode's doing**: the strict forced-JSON path scored at the floor (0.500) until the small model was
-let to think first. A much smaller model (Qwen3.5-0.8B) sits *below* the harness's structured-output
-floor — it can't emit a valid verdict under the frozen prompt — so the 1.000 is not reproducible by
-just any model. The readiness rubric (above) rolls the deterministic findings into per-dimension
-scores; LLM labels stay advisory and never move it.
+Two tasks ship — **phase-at-STP** and **metal/nonmetal/metalloid** plausibility — both reusing the
+product's own `build_label_prompt` with **no answer-bearing context**. Locally, **Qwen3-4B in
+reasoning mode scores 1.000** held-out on both (N=80, 95% CI [0.954, 1.000]); the same model on the
+strict forced-JSON path sits at the **0.500** floor. That gap *is* the finding — letting a small
+model think first is what makes it a trustworthy judge. (A much smaller 0.8B model can't even emit a
+valid verdict under the frozen prompt, so the 1.000 isn't reproducible by just any model.)
 
 ### On Kaggle: a public cross-model leaderboard
 
-The same benchmark is **published on [Kaggle Benchmarks](https://www.kaggle.com/benchmarks)** so
-frontier models can be compared on it directly — see [`kaggle/`](kaggle/). Each domain ships as an
-**open** set (the public cases above — reproducible, but a model may have seen them) and a
-**fresh-private** set (newly minted, never published, so a score can't be dismissed as
-memorisation). Scoring stays exact-match; each task returns `(accuracy, 95% CI)`.
+The same benchmark is **[published on Kaggle Benchmarks](https://www.kaggle.com/benchmarks)** —
+see [`kaggle/`](kaggle/) — so frontier models can be compared on it directly. Each domain ships an
+**open** set (public, reproducible, but a model may have seen it) and a **fresh-private** set
+(newly minted, never published, so a score can't be dismissed as memorisation); scoring stays
+exact-match.
 
 ```mermaid
 %%{init: {'flowchart': {'curve': 'stepAfter'}}}%%
@@ -391,14 +382,12 @@ flowchart TD
 | Qwen3-Next-80B **Thinking** | **1.000** | **1.000** | **1.000** | **1.000** |
 | Qwen3-Next-80B **Instruct** | **0.513** | **0.513** | 0.675 | 0.763 |
 
-*(N=80 each; accuracy with 95% Wilson CI half-width ≈ ±0.023 at 1.000. Thinking scored a clean 1.000
-across all four cells (both open and both private). DeepSeek V3.2 and gpt-oss-120b errored on
-transient provider load (429/503) — not a property of the benchmark.)* The
-headline: the **same** 80B model scores **1.000 Thinking vs 0.513 Instruct** on phase-plausibility —
-the reasoning thesis, live across vendors. Four frontier models cluster near-perfect while
-Qwen-Instruct sits at/near the 0.50 floor on phase, so the benchmark **discriminates** (not everyone
-passes); and each model's fresh-private number tracks its open one, so contamination isn't inflating
-the public scores.
+*(N=80 each; 95% Wilson CI half-width ≈ ±0.023 at 1.000. DeepSeek V3.2 and gpt-oss-120b errored on
+transient provider load (429/503) — not a property of the benchmark.)* The headline: the **same**
+80B model scores **1.000 Thinking vs 0.513 Instruct** on phase-plausibility — the reasoning thesis,
+live across vendors. Four frontier models cluster near-perfect while Qwen-Instruct sits at the 0.50
+floor on phase, so the benchmark **discriminates**; and each model's fresh-private number tracks its
+open one, so contamination isn't inflating the public scores.
 
 ## License
 
