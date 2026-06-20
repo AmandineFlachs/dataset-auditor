@@ -725,9 +725,9 @@ and lower your confidence.</pre>
   <p>With the tasks pushed once (the board is version-scoped), we swept Kaggle's catalog: Claude Haiku
   4.5, Gemini 3 Flash, Gemini 3.1 Flash-Lite, GLM-5, and the crucial pair: Qwen3-Next-80B in both
   its <em>Instruct</em> and <em>Thinking</em> modes. The run was deliberately <strong>paced and
-  gap-only</strong> to respect the free-credit limit: a single cheap probe to confirm credit, then one
-  model at a time, filling only empty cells. Output is left <strong>uncapped</strong>, the only
-  configuration compatible with reasoning mode (see the lessons below).</p>
+  gap-only</strong> — one model at a time, filling only empty cells. Output is left
+  <strong>uncapped</strong>, the only configuration compatible with reasoning mode (see the lessons
+  below).</p>
 
   <!-- 5 -->
   <h2 id="a-result">5 · The leaderboard, and what it tells us</h2>
@@ -849,9 +849,6 @@ and lower your confidence.</pre>
       <span class="pill warn">about the tooling</span>
       <h3>Hard-won operational lessons</h3>
       <ul class="tight">
-        <li><strong>Free credit is small.</strong> Each uncapped reasoning call <em>reserves</em>
-        ~$0.31&#8211;0.42; the binding limit is the per-call reservation, not parallelism. Run the most
-        expensive model <em>first</em>, while credit is fullest.</li>
         <li><strong>You can't cap output under <code>reasoning="high"</code></strong>: it sets a large
         server-side thinking budget, so any cap that would shrink the reservation also breaks the
         reasoning models. Cap and reasoning are mutually exclusive; uncapped is the only valid config.</li>
@@ -865,39 +862,21 @@ and lower your confidence.</pre>
 
   <!-- 7 -->
   <h2 id="a-useful">7 · Was Kaggle Benchmarks useful? A candid verdict</h2>
-  <div class="grid g2">
-    <div class="panel">
-      <span class="pill good">what it gave us</span>
-      <ul class="tight">
-        <li><strong>A multi-vendor frontier catalog, free.</strong> It turned the deferred "test more
-        models" goal (otherwise gated by our single local GPU) into a live result.</li>
-        <li><strong>External validation.</strong> The reasoning thesis reproduced on infrastructure
-        and model families that are not ours.</li>
-        <li><strong>A durable public artifact.</strong> Four leaderboards anyone can inspect and
-        rerun.</li>
-        <li><strong>Our exact method travelled unchanged</strong>: frozen prompt, exact-match,
-        baselines, leak-checker all ride inside the task.</li>
-      </ul>
-    </div>
-    <div class="panel">
-      <span class="pill warn">what it cost</span>
-      <ul class="tight">
-        <li><strong>A free-credit ceiling</strong> that forces careful pacing; the priciest reasoning
-        model (Qwen-Thinking) couldn't fully complete in a single day.</li>
-        <li><strong>A coarse quota model</strong>: an uncapped call reserves the whole context window.</li>
-        <li><strong>Version-scoped boards and opaque validation errors</strong> that cost iteration
-        time until the patterns were understood.</li>
-        <li><strong>Some flaky catalog providers.</strong></li>
-      </ul>
-    </div>
-  </div>
+  <p>Kaggle Benchmarks gave us what a single local GPU could not: a <strong>multi-vendor frontier
+  catalog, free</strong>, turning the deferred "test more models" goal into a live, reproducible
+  result. Our exact method travelled unchanged — frozen prompt, exact-match, baselines, and the
+  leak-checker all ride inside the task — so the reasoning thesis was <strong>externally validated</strong>
+  on hardware and model families that are not ours, as four public leaderboards anyone can rerun. The
+  costs were <em>operational, not scientific</em>: a coarse quota model (an uncapped call reserves the
+  whole context window), version-scoped boards and opaque validation errors that cost iteration time,
+  and a few flaky catalog providers.</p>
   <div class="callout good">
     <strong>Verdict: net strongly positive for our goal.</strong> Kaggle Benchmarks took a claim that
     previously rested on one model on one machine and turned it into a public, cross-vendor
     confirmation at zero infrastructure cost. Its limits are <em>operational</em>, not scientific:
-    they bound how much of the board we can fill per day, not whether the result holds. The core
-    finding (let the model reason and the advisory check is trustworthy; force a terse answer and it
-    fails) now stands on someone else's hardware, in the open.
+    they bound how much of the board we can fill, not whether the result holds. The core finding — let
+    the model reason and the advisory check is trustworthy; force a terse answer and it fails — now
+    stands on someone else's hardware, in the open.
   </div>
 </section>
 
