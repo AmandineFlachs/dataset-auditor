@@ -1,6 +1,0 @@
-{
-  "task": "triage-quality",
-  "status": "scaffold",
-  "description": "PLACEHOLDER, NOT BUILT. Phase 5 candidate: measure whether the triage 'what to check' note is useful/actionable for a flagged issue. Deferred until label-plausibility is proven clean (EVAL_PROTOCOL.md). Any task added here must pass the leakage checklist BEFORE it ships: no answer-bearing context, disjoint dev/calibration/test splits, frozen prompt, held-out reporting with baselines. Note this is judging note *quality*, which likely needs an LLM-as-judge grader rather than exact match — design that grader and its own leakage controls first.",
-  "splits": {"dev": 0, "calibration": 0, "test": 0}
-}

@@ -21,7 +21,6 @@ labels_plausibility/     # task 1: phase-at-STP
   meta.json  dev.jsonl  calibration.jsonl  test.jsonl  PROMPT_FREEZE.md
 element_classification/  # task 2: metal / nonmetal / metalloid
   meta.json  dev.jsonl  calibration.jsonl  test.jsonl  PROMPT_FREEZE.md
-triage_quality/          # Phase 5 scaffold only (not built)
 ```
 
 ## The two tasks
