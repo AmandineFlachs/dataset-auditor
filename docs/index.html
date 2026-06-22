@@ -148,7 +148,7 @@
       <text x="170" y="34" text-anchor="middle" font-size="13" font-weight="700" fill="#2f6fed">v0.1.0</text>
       <rect x="44" y="78" width="252" height="98" rx="10" fill="#fff" stroke="#e4e7ec"></rect>
       <text x="60" y="102" font-size="13.5" font-weight="700" fill="#1f2430">The auditor</text>
-      <text x="60" y="123" font-size="11.5" fill="#5b6472">8 deterministic checks plus an</text>
+      <text x="60" y="123" font-size="11.5" fill="#5b6472">7 deterministic checks plus an</text>
       <text x="60" y="139" font-size="11.5" fill="#5b6472">advisory local LLM, one HTML</text>
       <text x="60" y="155" font-size="11.5" fill="#5b6472">triage report, two real datasets.</text>
       <circle cx="460" cy="58" r="9" fill="#2f6fed"></circle>
@@ -235,10 +235,10 @@ Finding(
       <text x="255" y="188" text-anchor="middle" font-size="11.5" fill="#5b6472">normalize columns</text>
       <!-- checks -->
       <rect x="360" y="95" width="170" height="160" rx="14" fill="#f6f7f9" stroke="#cfd5df"></rect>
-      <text x="445" y="120" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2430">8 deterministic checks</text>
+      <text x="445" y="120" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2430">7 deterministic checks</text>
       <text x="445" y="143" text-anchor="middle" font-size="11" fill="#5b6472">schema · units · duplicates</text>
       <text x="445" y="160" text-anchor="middle" font-size="11" fill="#5b6472">near-dup · consistency</text>
-      <text x="445" y="177" text-anchor="middle" font-size="11" fill="#5b6472">PII · labels · formula</text>
+      <text x="445" y="177" text-anchor="middle" font-size="11" fill="#5b6472">PII · formula</text>
       <text x="445" y="208" text-anchor="middle" font-size="11" font-style="italic" fill="#2f9e6f">plain Python = the facts</text>
       <!-- findings -->
       <rect x="570" y="140" width="130" height="70" rx="12" fill="#fff" stroke="#e4e7ec"></rect>
@@ -256,7 +256,7 @@ Finding(
       <!-- LLM advisory box -->
       <rect x="360" y="290" width="340" height="56" rx="12" fill="#fff" stroke="#f0c98a" stroke-dasharray="5 4"></rect>
       <text x="530" y="313" text-anchor="middle" font-size="12.5" font-weight="700" fill="#c6841a">Local AI — advisory only</text>
-      <text x="530" y="331" text-anchor="middle" font-size="11" fill="#5b6472">writes summaries &amp; "what to check" · never changes a finding</text>
+      <text x="530" y="331" text-anchor="middle" font-size="11" fill="#5b6472">label-plausibility judge · summaries &amp; "what to check" · never overrides a finding</text>
       <line x1="530" y1="290" x2="530" y2="257" stroke="#f0c98a" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arr)"></line>
     </svg>
     <figcaption>The straight line (dataset → report) is all plain code. The dashed box is the AI, attached to the side in a strictly advisory role.</figcaption>
@@ -510,7 +510,7 @@ and lower your confidence.</pre>
     <thead><tr><th>Task</th><th>Strict format</th><th>Reasoning mode</th></tr></thead>
     <tbody>
       <tr><td>phase at STP</td><td>0.500 (floor; misses planted errors)</td><td><strong>1.000</strong> (80 / 80)</td></tr>
-      <tr><td>metal / nonmetal / metalloid</td><td>0.500</td><td><strong>1.000</strong> (80 / 80)</td></tr>
+      <tr><td>metal / nonmetal / metalloid</td><td>not measured (same floor expected)</td><td><strong>1.000</strong> (80 / 80)</td></tr>
     </tbody>
   </table>
   <p class="muted">Held-out test, 80 cases per domain, accuracy with a 95% confidence interval of
@@ -637,8 +637,9 @@ and lower your confidence.</pre>
   a <strong>frozen prompt</strong> byte-identical to the shipped builder and pinned by hash;
   <strong>exact-match scoring</strong> by plain code (no LLM grading an LLM); <strong>disjoint
   dev / calibration / held-out splits</strong>, the test opened only to score; <strong>no
-  answer-bearing context</strong> (only a minimal <code>{element, symbol}</code>), enforced by an
-  automated leak-checker and a value&#8596;label decorrelation guard; a <strong>0.50 trivial-baseline
+  answer-bearing context</strong> (only neutral fields — element, symbol, atomic number, period —
+  none of which entail the label), enforced by an automated leak-checker and a value&#8596;label
+  decorrelation guard; a <strong>0.50 trivial-baseline
   floor</strong> a model must clear with real knowledge; and <strong>honest 95% confidence ranges</strong>
   on every number (80 held-out cases per domain, grown from 40 to tighten the range to [0.954, 1.000]).</p>
   <p>Two domains carry the test: <strong>phase-at-STP plausibility</strong> (is "solid" right for this

@@ -28,9 +28,10 @@ element_classification/  # task 2: metal / nonmetal / metalloid
 Both ask the same shape of question — given an element + a claimed categorical value (plus
 answer-free context: element/symbol/atomic_number/period), is it `plausible` or
 `implausible`? Both reuse the shipped `build_label_prompt` + `LabelVerdict` and pass **no**
-`domain_context`. Each has three disjoint splits (`dev` 24 / `calibration` 30 / `test` 40,
+`domain_context`. Each has three disjoint splits (`dev` 24 / `calibration` 30 / `test` 80,
 classes balanced 50/50, each element in one split), and every value appears in both classes
-so there is no "guess by the word" shortcut.
+so there is no "guess by the word" shortcut. (The held-out `test` split was later grown from
+40 to 80 to tighten the confidence interval; the headline numbers below are on the full N=80.)
 
 - **`labels_plausibility`** — phase-at-STP (mercury labelled `solid` is the iconic defect).
 - **`element_classification`** — metal / nonmetal / metalloid (oxygen labelled `metal`).
@@ -58,35 +59,45 @@ baselines, the frozen-prompt hash, and per-case predictions.
 
 Report only the **held-out** (`test`) number, always with its 95% confidence interval and
 **both baselines** (vocabulary-floor + majority-class), citing task/split/N/frozen-prompt
-hash/scorer version/model/date. With N=40 the interval is wide (~±15pp) — that honesty is
-the point. The model is only interesting if it clearly beats both baselines on held-out
+hash/scorer version/model/date. Even at N=80 the interval stays honestly wide — a perfect
+score reports as [0.954, 1.000], not a bare 1.0 — and that honesty is the point. The model is only interesting if it clearly beats both baselines on held-out
 data. To narrow the interval, grow the `test` split (more curated cases), never by tuning
 on it.
 
 ## Results
 
-Held-out (`test`) results, reported per EVAL_PROTOCOL.md §6 (one-shot, with a 95% CI and
-both baselines). Provenance: frozen prompt `sha256:03bab39d…`, scorer `1.0.0`, 2026-06-13.
+Held-out (`test`) results, reported per EVAL_PROTOCOL.md §6 (one-shot, with a 95% CI and both
+baselines). The held-out split was grown from 40 to **80** curated cases to tighten the
+interval, so the headline reasoning numbers are on the full N=80 split. Provenance: frozen
+prompt `sha256:03bab39d…` (labels) / `sha256:d7e4a5d1…` (element), scorer `1.0.0`, 2026-06-13.
 
-| Task | Model | Inference path | Held-out (N=40) | 95% CI | Caught planted defects |
+| Task | Model | Inference path | Held-out (N=80) | 95% CI | Caught planted defects |
 | --- | --- | --- | --- | --- | --- |
-| labels_plausibility | Qwen/Qwen3-4B | strict (forced JSON) | 0.500 | [0.352, 0.648] | 0 / 20 |
-| labels_plausibility | Qwen/Qwen3-4B | **reasoning** | **1.000** | [0.912, 1.000] | **20 / 20** |
-| element_classification | Qwen/Qwen3-4B | **reasoning** | **1.000** | [0.912, 1.000] | **20 / 20** |
+| labels_plausibility | Qwen/Qwen3-4B | **reasoning** | **1.000** | [0.954, 1.000] | **40 / 40** |
+| element_classification | Qwen/Qwen3-4B | **reasoning** | **1.000** | [0.954, 1.000] | **40 / 40** |
 
 Baselines on every row: vocabulary-floor 0.500, majority-class 0.500. Provenance per task in
-its `meta.json` (`frozen_prompt.hash`, `scorer_version`); runs dated 2026-06-13.
+its `meta.json` (`frozen_prompt.hash`, `scorer_version`).
 
-Same model, same frozen prompt, same held-out cases — the only change between the first two
-rows is letting the reasoning model think before answering (`--reasoning`; see "reasoning
-mode" in `src/auditor/llm.py`). The strict path forces `response_format=json_object`, which
-suppresses the model's `<think>` step and makes it confabulate ("Helium is solid at STP");
-reasoning mode drops that constraint and extracts the final JSON. This is why the shipped
-`labels` check defaults to reasoning. The second domain (`element_classification`) confirms
-the win generalizes beyond phase recall. Every fix was driven by diagnostics and the `dev`
-split, never by inspecting `test`, so each row is a single honest held-out measurement.
-(`element_classification` strict was not run; the json_object suppression is model-/path-level,
-so a similar floor is expected, but it is not claimed here since it was not measured.)
+**The reasoning win, as a controlled diagnostic.** On the original 40-case held-out split the
+**strict** (forced-JSON) and **reasoning** paths were run on the *same cases*, changing only
+whether the model may think before answering (`--reasoning`; see "reasoning mode" in
+`src/auditor/llm.py`):
+
+| Inference path | Held-out (N=40) | 95% CI | Caught planted defects |
+| --- | --- | --- | --- |
+| strict (forced JSON) | 0.500 | [0.352, 0.648] | 0 / 20 |
+| **reasoning** | **1.000** | [0.912, 1.000] | **20 / 20** |
+
+The strict path forces `response_format=json_object`, which suppresses the model's `<think>`
+step and makes it confabulate ("Helium is solid at STP"); reasoning mode drops that constraint
+and extracts the final JSON. This is why the shipped `labels` check defaults to reasoning — and
+why the held-out split was then grown to 80 and the reasoning result re-verified above. The
+second domain (`element_classification`) confirms the win generalizes beyond phase recall.
+Every fix was driven by diagnostics and the `dev` split, never by inspecting `test`, so each
+row is a single honest held-out measurement. (`element_classification` strict was not run; the
+json_object suppression is model-/path-level, so a similar floor is expected, but it is not
+claimed here since it was not measured.)
 
 ## Before adding cases or a new task
 
