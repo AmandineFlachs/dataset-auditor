@@ -17,6 +17,25 @@ All notable changes to this project are documented here. The format is based on
   **same 80B model at Thinking 1.000 vs Instruct 0.513** on phase-plausibility — the reasoning
   thesis, live across vendors. The benchmark discriminates (Qwen-Instruct at the 0.50 floor) and
   each model's fresh-private score tracks its open one (no contamination inflation).
+- **Third dataset — `table_traces`: the auditor turned on an ML *training* set.** A new `DatasetSpec`
+  onboards the sibling `table_reasoning_traces` project (public as `grounded-table-sft`; TAT-QA-derived,
+  CC BY 4.0) by flattening its nested reasoning-trace JSONL to one summary row per example via that
+  repo's `scripts/export_for_auditor.py`. Demonstrates the health checks beyond scientific tables:
+  structural range bounds (a grounded trace must cite ≥1 cell, tables ≥2 cols), duplicate `example_id`,
+  an **orientation-invariant** cross-table near-dup rule (the same base table appears row- and
+  column-oriented under one `base_table_id`, so a content sig spanning multiple base ids is a genuine
+  duplicate), and a PII scan of the generated question/answer text. The 1,266-example v0.1.0 set audits
+  **clean (0 findings)** — which is exactly the zero-findings health view the fix below now renders.
+
+### Fixed
+
+- **Clean-dataset reports now show the health view, not just "No findings".** The readiness
+  rubric and the dataset profile previously lived inside the findings layout (`{% if groups %}`),
+  so a dataset with **zero findings** rendered only a bare "No findings" card — hiding exactly the
+  health summary you'd want when everything passes. The no-findings state now also renders the
+  **Dataset readiness** panel and the **Dataset profile** (per-column type + missingness and
+  categorical distributions), reusing the `readiness`/`overview` data already computed independent
+  of findings in `report.render`. Findings-present reports are unchanged; tests stay green (204).
 
 ## [0.2.0] - 2026-06-14
 

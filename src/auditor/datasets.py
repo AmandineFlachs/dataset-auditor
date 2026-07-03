@@ -342,7 +342,48 @@ LEMAT_BULK = DatasetSpec(
     ),
 )
 
-DATASETS: dict[str, DatasetSpec] = {d.name: d for d in (METEORITES, LEMAT_BULK)}
+# Grounded table-reasoning-traces dataset (sibling project ../table_reasoning_traces),
+# flattened to one summary row per example by its export_for_auditor.py. Demonstrates
+# the auditor on an ML *training* dataset (not a scientific table): structural sanity
+# (table shape, trace/citation counts), duplicate example ids, cross-table content
+# near-dups, and a PII scan of the generated question + answer text.
+TABLE_TRACES = DatasetSpec(
+    name="table_traces",
+    filename="table_traces.csv",
+    source_url="(local) ../table_reasoning_traces — TAT-QA-derived grounded reasoning traces",
+    numeric_columns=(
+        "n_table_rows", "n_table_cols", "n_trace_steps", "n_cites", "answer_n_rows",
+    ),
+    key_column="example_id",
+    range_rules={
+        "n_table_rows": {"min": 1},
+        "n_table_cols": {"min": 2},
+        "n_trace_steps": {"min": 1},
+        "n_cites": {"min": 1},          # a grounded trace must cite at least one cell
+        "answer_n_rows": {"min": 0},
+    },
+    near_dup_rules=(
+        NearDupRule(content_key="table_content_sig", identity="base_table_id"),
+    ),
+    pii_text_columns=("question", "answer_label"),
+    categorical_columns=("question_type", "split", "trace_source", "difficulty", "domain"),
+    domain_context=(
+        "Grounded table-reasoning traces derived from TAT-QA financial-report tables. "
+        "One row per generated example: a table + a constrained question + a step-by-step "
+        "reasoning trace citing specific cells + a gold answer. n_table_rows/n_table_cols "
+        "are the table's shape (>=1 rows, >=2 cols). n_trace_steps is the number of reasoning "
+        "steps (>=1; the last is a 'conclude'). n_cites is the count of distinct cells the "
+        "trace cites (>=1 for a grounded trace). answer_n_rows is how many table rows the "
+        "answer selects (0 is valid: an empty/'none' result). question_type is one of "
+        "best_under_constraint, threshold_filter, tradeoff_summary. trace_source is "
+        "'programmatic' or 'llm' (silver). example_id should be unique. table_content_sig is "
+        "an orientation-invariant hash of the table's cells; the same underlying table appears "
+        "under both row and column orientations (same base_table_id), so a content hash that "
+        "spans multiple base_table_ids would be a genuine cross-table duplicate."
+    ),
+)
+
+DATASETS: dict[str, DatasetSpec] = {d.name: d for d in (METEORITES, LEMAT_BULK, TABLE_TRACES)}
 # The flagship is the default; meteorites stays as the documented proving ground
 # (and the fixture that exercises the range / null-island checks LeMat-Bulk doesn't).
 DEFAULT = LEMAT_BULK

@@ -250,6 +250,9 @@ h1,h2{font-family:var(--font-display);margin:0;letter-spacing:-.02em}
   background:color-mix(in oklab,var(--c-clean) 12%,var(--surface));border:1px solid color-mix(in oklab,var(--c-clean) 26%,var(--line))}
 .empty-title{font-family:var(--font-display);font-size:16px;font-weight:600}
 .empty-sub{font-size:13px;color:var(--ink-3)}
+.clean-state{height:100%;overflow:auto}
+.clean-inner{max-width:780px;margin:0 auto;padding:28px 20px;width:100%}
+.clean-inner .empty{padding:44px 20px 4px}
 .toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,16px);opacity:0;pointer-events:none;background:var(--ink);
   color:var(--paper);font-size:13px;font-weight:500;padding:11px 18px;border-radius:10px;box-shadow:var(--shadow-lg);transition:.25s;z-index:60}
 .toast--on{opacity:1;transform:translate(-50%,0)}
@@ -490,10 +493,63 @@ h1,h2{font-family:var(--font-display);margin:0;letter-spacing:-.02em}
       </main>
     </div>
   {% else %}
-    <div class="empty">
-      <div class="empty-mark">&#10003;</div>
-      <div class="empty-title">No findings</div>
-      <div class="empty-sub">This dataset passed every configured check. 0 findings.</div>
+    {# Clean dataset: still show the health view (readiness + profile), not just a bare
+       "no findings" card. The readiness/overview data is computed independent of findings. #}
+    <div class="clean-state">
+      <div class="clean-inner">
+      <div class="empty empty--sm">
+        <div class="empty-mark">&#10003;</div>
+        <div class="empty-title">No findings</div>
+        <div class="empty-sub">This dataset passed every configured check. 0 findings.</div>
+      </div>
+
+      {% if readiness %}
+      <div class="readiness">
+        <div class="rd-head">
+          <div class="rd-title">Dataset readiness</div>
+          <div class="rd-overall">{% if readiness.readiness is not none %}{{ readiness.readiness }}<small>/100</small>{% else %}n/a{% endif %}</div>
+        </div>
+        <div class="rd-dims">
+          {% for d in readiness.dimensions %}
+          <div class="rd-dim">
+            <div class="rd-name">{{ d.name }}</div>
+            {% if d.assessed %}
+            <div class="rd-track"><div class="rd-fill {% if d.score < 70 %}rd-bad{% elif d.score < 95 %}rd-warn{% endif %}" style="width:{{ d.score }}%"></div></div>
+            <div class="rd-val">{{ d.score }}{% if d.affected_rows %} &middot; {{ "{:,}".format(d.affected_rows) }} rows{% endif %}</div>
+            {% else %}
+            <div class="rd-track rd-na"></div>
+            <div class="rd-val rd-muted">not assessed</div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% for d in readiness.dimensions if d.advisory %}
+        <div class="rd-adv">Advisory (not scored): the LLM flagged {{ d.advisory.labels_flagged_rows }} {{ d.name }} value(s) for human review.</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if overview %}
+      <section class="group reference">
+        <div class="group-head"><div class="group-head-l"><h2>Dataset profile</h2></div><p class="group-blurb">Health characterization of a clean dataset.</p></div>
+        <details class="ref-panel" id="overview" open>
+          <summary>Dataset overview &middot; {{ "{:,}".format(overview.n_rows) }} rows &times; {{ overview.n_cols }} columns</summary>
+          <table>
+            <thead><tr><th>Column</th><th>Type</th><th class="num">% missing</th></tr></thead>
+            <tbody>
+            {% for c in overview.columns %}<tr><td><code>{{ c.name }}</code></td><td>{{ c.dtype }}</td><td class="num">{{ "%.1f"|format(c.null_pct) }}%</td></tr>{% endfor %}
+            </tbody>
+          </table>
+          {% for cat in overview.categoricals %}
+          <table>
+            <thead><tr><th>{{ cat.name }}</th><th class="num">count</th></tr></thead>
+            <tbody>{% for value, n in cat.counts %}<tr><td><code>{{ value }}</code></td><td class="num">{{ "{:,}".format(n) }}</td></tr>{% endfor %}</tbody>
+          </table>
+          {% endfor %}
+        </details>
+      </section>
+      {% endif %}
+      </div>
     </div>
   {% endif %}
   </div>

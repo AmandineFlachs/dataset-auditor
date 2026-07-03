@@ -199,6 +199,20 @@ python scripts/acquire_lemat.py        # the flagship sample, across all four co
 The LeMat-Bulk script draws a reproducible random sample of the scalar science columns
 across all four configs (`compatible_pbe/pbesol/scan`, `non_compatible`).
 
+A third spec, **`table_traces`**, points the same checks at an ML *training* set rather than a
+scientific table — the sibling [`grounded-table-sft`](https://github.com/AmandineFlachs/grounded-table-sft)
+project (TAT-QA-derived, CC BY 4.0). It has no acquire script here; instead that repo flattens its
+nested reasoning-trace JSONL to one summary row per example:
+
+```powershell
+# from a checkout of the grounded-table-sft repo, alongside this one:
+python scripts/export_for_auditor.py data/processed/realtable.v0_1_0.jsonl ../dataset-auditor/data/table_traces.csv
+auditor run --dataset table_traces --out report.html --open
+```
+
+It exercises structural range bounds (a grounded trace must cite ≥1 cell), duplicate `example_id`,
+and an orientation-invariant cross-table near-dup rule; the 1,266-example set audits clean.
+
 ## Roadmap
 
 Everything through **`v0.2.0` is ✅ done** — the `v0.1.0` core (checks, report, live local-LLM

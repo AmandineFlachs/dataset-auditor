@@ -203,6 +203,22 @@ def test_clean_dataset_shows_pass_message():
     assert "No findings" in html and "0 findings" in html
 
 
+def test_clean_dataset_still_shows_health_view():
+    # A zero-findings dataset must still surface the health summary (readiness +
+    # profile), not just a bare "No findings" card.
+    df = pd.DataFrame({
+        "row_id": [0, 1, 2, 3],
+        "mass_g": [1.0, 2.0, 3.0, 4.0],
+        "fall": ["Fell", "Found", "Fell", "Fell"],
+        "nametype": ["Valid", "Valid", "Relict", "Valid"],
+    })
+    html = report.render([], METEORITES, df=df)
+    assert "No findings" in html              # still says it's clean
+    assert "Dataset readiness" in html        # ...and shows the rubric
+    assert "Dataset overview" in html         # ...and the profile
+    assert "Fell" in html                     # categorical distribution rendered
+
+
 def test_design_tokens_and_triage_layout():
     html = report.render([_f("a.b", Severity.WARN, row_id=1)], METEORITES)
     assert "--paper:" in html and "--c-critical:" in html  # the Signal token system
